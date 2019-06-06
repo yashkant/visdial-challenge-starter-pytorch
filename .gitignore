@@ -15,7 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
-lib64/
+https://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pyhttps://github.com/batra-mlp-lab/visdial-challenge-starter-pytorch/blob/master/visdialch/data/dataset.pylib64/
 parts/
 sdist/
 var/
@@ -37,3 +37,6 @@ logs/
 # virtualenv
 venv/
 ENV/
+
+# Pycharm 
+.idea/

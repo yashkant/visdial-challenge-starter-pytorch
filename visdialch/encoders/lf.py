@@ -70,9 +70,8 @@ class LateFusionEncoder(nn.Module):
         # embed questions
         ques = ques.view(batch_size * num_rounds, max_sequence_length)
         ques_embed = self.word_embed(ques)
-
-        # shape: (batch_size * num_rounds, max_sequence_length,
-        #         lstm_hidden_size)
+        # TODO: correction!
+        # shape: (batch_size * num_rounds, lstm_hidden_size)
         _, (ques_embed, _) = self.ques_rnn(ques_embed, batch["ques_len"])
 
         # project down image features and ready for attention

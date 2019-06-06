@@ -86,40 +86,66 @@ class DialogsReader(object):
                     "dialog"
                 ]
 
-            print(f"[{self._split}] Tokenizing questions...")
-            for i in tqdm(range(len(self.questions))):
-                self.questions[i] = word_tokenize(self.questions[i] + "?")
+            # This flag tells the reader if the tokenization is to be done
+            # at the beginning or during the first epoch. It also tells the
+            # reader if tokenized words are already available.
+            self.lazy_tokenization = False
 
-            print(f"[{self._split}] Tokenizing answers...")
-            for i in tqdm(range(len(self.answers))):
-                self.answers[i] = word_tokenize(self.answers[i])
+            if not self.lazy_tokenization:
+                print(f"[{self._split}] Tokenizing questions...")
+                for i in tqdm(range(len(self.questions))):
+                    self.questions[i] = word_tokenize(self.questions[i] + "?")
 
-            print(f"[{self._split}] Tokenizing captions...")
-            for image_id, caption in tqdm(self.captions.items()):
-                self.captions[image_id] = word_tokenize(caption)
+                print(f"[{self._split}] Tokenizing answers...")
+                for i in tqdm(range(len(self.answers))):
+                    self.answers[i] = word_tokenize(self.answers[i])
+
+                print(f"[{self._split}] Tokenizing captions...")
+                for image_id, caption in tqdm(self.captions.items()):
+                    self.captions[image_id] = word_tokenize(caption)
 
     def __len__(self):
         return len(self.dialogs)
 
     def __getitem__(self, image_id: int) -> Dict[str, Union[int, str, List]]:
-        caption_for_image = self.captions[image_id]
         dialog_for_image = copy.copy(self.dialogs[image_id])
         num_rounds = self.num_rounds[image_id]
 
         # Replace question and answer indices with actual word tokens.
-        for i in range(len(dialog_for_image)):
-            dialog_for_image[i]["question"] = self.questions[
-                dialog_for_image[i]["question"]
-            ]
-            dialog_for_image[i]["answer"] = self.answers[
-                dialog_for_image[i]["answer"]
-            ]
-            for j, answer_option in enumerate(
-                dialog_for_image[i]["answer_options"]
-            ):
-                dialog_for_image[i]["answer_options"][j] = self.answers[
-                    answer_option
+        if self.lazy_tokenization:
+            for i in tqdm(range(len(dialog_for_image))):
+                print(f"[{self._split}] Tokenizing dialogs...")
+
+                dialog_for_image[i]["question"] = word_tokenize(self.questions[
+                    dialog_for_image[i]["question"]
+                ])
+                dialog_for_image[i]["answer"] = word_tokenize(self.answers[
+                    dialog_for_image[i]["answer"]
+                ])
+                for j, answer_option in enumerate(
+                    dialog_for_image[i]["answer_options"]
+                ):
+                    dialog_for_image[i]["answer_options"][j] = word_tokenize(
+                        self.answers[answer_option]
+                    )
+            caption_for_image = word_tokenize(self.captions[image_id])
+            # Tokenize once and re-use ahead.
+            self.lazy_tokenization = False
+        else:
+            for i in range(len(dialog_for_image)):
+                dialog_for_image[i]["question"] = self.questions[
+                    dialog_for_image[i]["question"]
                 ]
+                dialog_for_image[i]["answer"] = self.answers[
+                    dialog_for_image[i]["answer"]
+                ]
+                for j, answer_option in enumerate(
+                    dialog_for_image[i]["answer_options"]
+                ):
+                    dialog_for_image[i]["answer_options"][j] = self.answers[
+                        answer_option
+                    ]
+            caption_for_image = self.captions[image_id]
 
         return {
             "image_id": image_id,
