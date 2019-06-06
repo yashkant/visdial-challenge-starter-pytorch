@@ -43,6 +43,9 @@ class DemoObject:
         # Make the call for the generating caption here.
         image_caption = "There is a cow in a green" \
                         " field eating grass."
+
+        # Store the caption in natural language
+        self.image_caption_nl = image_caption
         image_caption = word_tokenize(image_caption)
         self.image_caption = self.vocabulary.to_indices(image_caption)
 
@@ -52,22 +55,33 @@ class DemoObject:
         self.num_rounds = 0
         self.update()
 
-    # Call this method to retrive an object for inference.
-    def get_data(self):
+    # Call this method to retrive an object for inference, with the
+    # natural language question asked by the user.
+    def get_data(self, question=None):
         data = {}
         data["img_feat"] = self.image_features
-        data["ques"] = self.questions.long()
         data["hist"] = self.history.long()
-        data["ques_len"] = torch.tensor(self.question_lengths).long()
         data["hist_len"] = torch.tensor(self.history_lengths).long()
-        data["ans_len"] = torch.tensor(self.answer_lengths).long()
         data["num_rounds"] = torch.tensor(self.num_rounds).long()
+
+        if question is not None:
+            # Create field for current question, I think we need to place
+            # questions one by one in data["ques"] field and move the
+            # older ones to history (done by update).
+            question = word_tokenize(question)
+            question = self.vocabulary.to_indices(question)
+            pad_question, question_length = VisDialDataset._pad_sequences(
+                self.config,
+                self.vocabulary,
+                [question]
+            )
+            data["ques"] = pad_question.long()
+            data["ques_len"] = question_length.long()
 
         return data
 
     # Call this method as we have new dialogs in conversation.
-    def update(self, question: str = None, answer: str = None):
-
+    def update(self, question: str=None, answer: str=None):
         if question is not None:
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)
@@ -101,3 +115,7 @@ class DemoObject:
     # Call this method to reset data
     def reset(self):
         pass
+
+    # Returns natural language caption
+    def get_caption(self):
+        return self.image_caption_nl

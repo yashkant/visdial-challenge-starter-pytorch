@@ -20,6 +20,12 @@ class GenerativeDecoder(nn.Module):
             dropout=config["dropout"],
         )
 
+        self.mode = None
+        if "mode" in config and config["mode"] == "demo":
+            self.mode = config["mode"]
+            self.ans_in = [vocabulary.SOS_INDEX]
+            self.eos_index = vocabulary.EOS_INDEX.long()
+
         self.lstm_to_words = nn.Linear(
             self.config["lstm_hidden_size"], len(vocabulary)
         )
@@ -71,6 +77,45 @@ class GenerativeDecoder(nn.Module):
             #         vocabulary_size)
             ans_word_scores = self.lstm_to_words(ans_out)
             return ans_word_scores
+
+        elif self.mode is not None and self.mode == "demo":
+
+            batch_size, num_rounds = 1, 1
+            ans_in = self.ans_in
+            ans_in = ans_in.view(batch_size * num_rounds, ans_in.size()[-1])
+
+            # shape: (batch_size * num_rounds, max_sequence_length,
+            #         word_embedding_size)
+            ans_in_embed = self.word_embed(ans_in)
+
+            # reshape encoder output to be set as initial hidden state of LSTM.
+            # shape: (lstm_num_layers, batch_size * num_rounds,
+            #         lstm_hidden_size)
+            init_hidden = encoder_output.view(1, batch_size * num_rounds, -1)
+            init_hidden = init_hidden.repeat(
+                self.config["lstm_num_layers"], 1, 1
+            )
+            init_cell = torch.zeros_like(init_hidden)
+
+            end_token_flag = False
+            answer_indices = []
+            while not end_token_flag:
+                # shape: (batch_size * num_rounds, max_sequence_length,
+                #         lstm_hidden_size)
+                ans_out, (hidden, cell) = self.answer_rnn(
+                    ans_in_embed, (init_hidden, init_cell)
+                )
+                init_hidden, init_cell = hidden, cell
+                ans_out = self.dropout(ans_out)
+                ans_scores = self.lstm_to_words(ans_out)
+                _, ans_index = ans_scores.view(-1).max(0)
+                if torch.equal(ans_index.long(), self.eos_index):
+                    end_token_flag = True
+                else:
+                    answer_indices.append(ans_index)
+                    ans_in = ans_in.view(batch_size * num_rounds, ans_in.size()[-1])
+                    ans_in_embed = self.word_embed(ans_in)
+            return answer_indices
 
         else:
 

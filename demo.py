@@ -3,18 +3,16 @@ import json
 import os
 
 import torch
-from torch import nn
-from torch.utils.data import DataLoader
-from tqdm import tqdm
 import yaml
+from torch import nn
+from nltk.tokenize.moses import MosesDetokenizer
 
-from visdialch.data.dataset import VisDialDataset
-from visdialch.encoders import Encoder
+from visdialch.data.demo_object import DemoObject
 from visdialch.decoders import Decoder
-from visdialch.metrics import SparseGTMetrics, NDCG, scores_to_ranks
+from visdialch.encoders import Encoder
+from visdialch.metrics import SparseGTMetrics, NDCG
 from visdialch.model import EncoderDecoderModel
 from visdialch.utils.checkpointing import load_checkpoint
-
 
 parser = argparse.ArgumentParser(
     "Evaluate and/or generate EvalAI submission file."
@@ -23,35 +21,8 @@ parser.add_argument(
     "--config-yml",
     default="configs/lf_disc_faster_rcnn_x101.yml",
     help="Path to a config file listing reader, model and optimization "
-    "parameters.",
+         "parameters.",
 )
-
-# parser.add_argument(
-#     "--split",
-#     default="val",
-#     choices=["val", "test"],
-#     help="Which split to evaluate upon.",
-# )
-
-# parser.add_argument(
-#     "--val-json",
-#     default="data/visdial_1.0_val.json",
-#     help="Path to VisDial v1.0 val data. This argument doesn't work when "
-#     "--split=test.",
-# )
-# parser.add_argument(
-#     "--val-dense-json",
-#     default="data/visdial_1.0_val_dense_annotations.json",
-#     help="Path to VisDial v1.0 val dense annotations (if evaluating on val "
-#     "split). This argument doesn't work when --split=test.",
-# )
-
-# parser.add_argument(
-#     "--test-json",
-#     default="data/visdial_1.0_test.json",
-#     help="Path to VisDial v1.0 test data. This argument doesn't work when "
-#     "--split=val.",
-# )
 
 parser.add_argument_group("Demo related arguments")
 parser.add_argument(
@@ -91,15 +62,8 @@ parser.add_argument(
     "--in-memory",
     action="store_true",
     help="Load the whole dataset and pre-extracted image features in memory. "
-    "Use only in presence of large RAM, atleast few tens of GBs.",
+         "Use only in presence of large RAM, atleast few tens of GBs.",
 )
-
-# parser.add_argument_group("Submission related arguments")
-# parser.add_argument(
-#     "--save-ranks-path",
-#     default="logs/ranks.json",
-#     help="Path (json) to save ranks, in a EvalAI submission format.",
-# )
 
 # For reproducibility.
 # Refer https://pytorch.org/docs/stable/notes/randomness.html
@@ -130,50 +94,16 @@ print(yaml.dump(config, default_flow_style=False))
 for arg in vars(args):
     print("{:<20}: {}".format(arg, getattr(args, arg)))
 
-
 # =============================================================================
 #   SETUP DATASET, DATALOADER, MODEL
 # =============================================================================
 
-image_id = ''
-caption = ''
-
-if args.split == "val":
-    val_dataset = VisDialDataset(
-        config["dataset"],
-        args.val_json,
-        args.val_dense_json,
-        overfit=args.overfit,
-        in_memory=args.in_memory,
-        return_options=False,
-        add_boundary_toks=False
-        if config["model"]["decoder"] == "disc"
-        else True,
-    )
-else:
-    val_dataset = VisDialDataset(
-        config["dataset"],
-        args.test_json,
-        overfit=args.overfit,
-        in_memory=args.in_memory,
-        return_options=False,
-        add_boundary_toks=False
-        if config["model"]["decoder"] == "disc"
-        else True,
-    )
-
-
-val_dataloader = DataLoader(
-    val_dataset,
-    batch_size=config["solver"]["batch_size"]
-    if config["model"]["decoder"] == "disc"
-    else 5,
-    num_workers=args.cpu_workers,
-)
+demo_object = DemoObject(config["dataset"])
 
 # Pass vocabulary to construct Embedding layer.
-encoder = Encoder(config["model"], val_dataset.vocabulary)
-decoder = Decoder(config["model"], val_dataset.vocabulary)
+encoder = Encoder(config["model"], demo_object.vocabulary)
+decoder = Decoder(config["model"], demo_object.vocabulary)
+
 print("Encoder: {}".format(config["model"]["encoder"]))
 print("Decoder: {}".format(config["model"]["decoder"]))
 
@@ -201,46 +131,28 @@ ndcg = NDCG()
 # =============================================================================
 
 model.eval()
-ranks_json = []
+break_loop = False
 
-for _, batch in enumerate(tqdm(val_dataloader)):
+while not break_loop:
+    print(f"Image Caption: {demo_object.image_caption_nl()}")
+    user_question = input("Type Question: ")
+    batch = demo_object.get_data(user_question)
+
     for key in batch:
         batch[key] = batch[key].to(device)
     with torch.no_grad():
         output = model(batch)
 
-    ranks = scores_to_ranks(output)
-    for i in range(len(batch["img_ids"])):
-        # Cast into types explicitly to ensure no errors in schema.
-        # Round ids are 1-10, not 0-9
-        if args.split == "test":
-            ranks_json.append(
-                {
-                    "image_id": batch["img_ids"][i].item(),
-                    "round_id": int(batch["num_rounds"][i].item()),
-                    "ranks": [
-                        rank.item()
-                        for rank in ranks[i][batch["num_rounds"][i] - 1]
-                    ],
-                }
-            )
-        else:
-            for j in range(batch["num_rounds"][i]):
-                ranks_json.append(
-                    {
-                        "image_id": batch["img_ids"][i].item(),
-                        "round_id": int(j + 1),
-                        "ranks": [rank.item() for rank in ranks[i][j]],
-                    }
-                )
+    while True:
+        user_input = input("Continue? [(y)es/(n)o]: ")
+        if user_input == 'y' or user_input == 'yes':
+            break
+        elif user_input == 'n' or user_input == 'no':
+            break_loop = True
+            break
 
-    if args.split == "val":
-        sparse_metrics.observe(output, batch["ans_ind"])
-        if "gt_relevance" in batch:
-            output = output[
-                torch.arange(output.size(0)), batch["round_id"] - 1, :
-            ]
-            ndcg.observe(output, batch["gt_relevance"])
+
+
 
 if args.split == "val":
     all_metrics = {}

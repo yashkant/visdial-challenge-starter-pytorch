@@ -1,4 +1,4 @@
-# Dataset reader arguments
+# Keep only vocabulary builder argument
 dataset:
   image_features_train_h5: 'data/features_faster_rcnn_x101_train.h5'
   image_features_val_h5: 'data/features_faster_rcnn_x101_val.h5'
@@ -15,24 +15,11 @@ dataset:
 model:
   encoder: 'lf'
   decoder: 'gen'
-
+  mode: 'demo'
   img_feature_size: 2048
   word_embedding_size: 300
   lstm_hidden_size: 512
   lstm_num_layers: 2
   dropout: 0.2
 
-
-# Optimization related arguments
-solver:
-  batch_size: 224 # 56 x num_gpus is a good rule of thumb
-  num_epochs: 20
-  initial_lr: 0.01
-  training_splits: "train"  # "trainval"
-  lr_gamma: 0.1
-  lr_milestones: # epochs when lr => lr * lr_gamma
-    - 4
-    - 7
-    - 10
-  warmup_factor: 0.2
-  warmup_epochs: 1
+# Add Feature Extractor and Image Captioning args later
