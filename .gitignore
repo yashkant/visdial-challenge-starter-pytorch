@@ -37,3 +37,6 @@ logs/
 # virtualenv
 venv/
 ENV/
+
+# Pycharm
+.idea/*

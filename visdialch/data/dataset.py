@@ -123,17 +123,25 @@ class VisDialDataset(Dataset):
                         )
 
         questions, question_lengths = self._pad_sequences(
+            self.config,
+            self.vocabulary,
             [dialog_round["question"] for dialog_round in dialog]
         )
         history, history_lengths = self._get_history(
+            self.config,
+            self.vocabulary,
             caption,
             [dialog_round["question"] for dialog_round in dialog],
             [dialog_round["answer"] for dialog_round in dialog],
         )
         answers_in, answer_lengths = self._pad_sequences(
+            self.config,
+            self.vocabulary,
             [dialog_round["answer"][:-1] for dialog_round in dialog]
         )
         answers_out, _ = self._pad_sequences(
+            self.config,
+            self.vocabulary,
             [dialog_round["answer"][1:] for dialog_round in dialog]
         )
 
@@ -160,6 +168,8 @@ class VisDialDataset(Dataset):
                 answer_option_lengths = []
                 for dialog_round in dialog:
                     options, option_lengths = self._pad_sequences(
+                        self.config,
+                        self.vocabulary,
                         [
                             option[:-1]
                             for option in dialog_round["answer_options"]
@@ -168,6 +178,8 @@ class VisDialDataset(Dataset):
                     answer_options_in.append(options)
 
                     options, _ = self._pad_sequences(
+                        self.config,
+                        self.vocabulary,
                         [
                             option[1:]
                             for option in dialog_round["answer_options"]
@@ -187,6 +199,8 @@ class VisDialDataset(Dataset):
                 answer_option_lengths = []
                 for dialog_round in dialog:
                     options, option_lengths = self._pad_sequences(
+                        self.config,
+                        self.vocabulary,
                         dialog_round["answer_options"]
                     )
                     answer_options.append(options)
@@ -214,7 +228,11 @@ class VisDialDataset(Dataset):
 
         return item
 
-    def _pad_sequences(self, sequences: List[List[int]]):
+    @staticmethod
+    def _pad_sequences(
+            config: Dict,
+            vocabulary: Vocabulary,
+            sequences: List[List[int]]):
         """Given tokenized sequences (either questions, answers or answer
         options, tokenized in ``__getitem__``), padding them to maximum
         specified sequence length. Return as a tensor of size
@@ -238,35 +256,37 @@ class VisDialDataset(Dataset):
 
         for i in range(len(sequences)):
             sequences[i] = sequences[i][
-                : self.config["max_sequence_length"] - 1
+                : config["max_sequence_length"] - 1
             ]
         sequence_lengths = [len(sequence) for sequence in sequences]
 
         # Pad all sequences to max_sequence_length.
         maxpadded_sequences = torch.full(
-            (len(sequences), self.config["max_sequence_length"]),
-            fill_value=self.vocabulary.PAD_INDEX,
+            (len(sequences), config["max_sequence_length"]),
+            fill_value=vocabulary.PAD_INDEX,
         )
         padded_sequences = pad_sequence(
             [torch.tensor(sequence) for sequence in sequences],
             batch_first=True,
-            padding_value=self.vocabulary.PAD_INDEX,
+            padding_value=vocabulary.PAD_INDEX,
         )
         maxpadded_sequences[:, : padded_sequences.size(1)] = padded_sequences
         return maxpadded_sequences, sequence_lengths
 
+    @staticmethod
     def _get_history(
-        self,
+        config,
+        vocabulary,
         caption: List[int],
         questions: List[List[int]],
         answers: List[List[int]],
     ):
         # Allow double length of caption, equivalent to a concatenated QA pair.
-        caption = caption[: self.config["max_sequence_length"] * 2 - 1]
+        caption = caption[: config["max_sequence_length"] * 2 - 1]
 
         for i in range(len(questions)):
             questions[i] = questions[i][
-                : self.config["max_sequence_length"] - 1
+                : config["max_sequence_length"] - 1
             ]
 
         for i in range(len(answers)):
@@ -277,10 +297,10 @@ class VisDialDataset(Dataset):
         history = []
         history.append(caption)
         for question, answer in zip(questions, answers):
-            history.append(question + answer + [self.vocabulary.EOS_INDEX])
+            history.append(question + answer + [vocabulary.EOS_INDEX])
         # Drop last entry from history (there's no eleventh question).
         history = history[:-1]
-        max_history_length = self.config["max_sequence_length"] * 2
+        max_history_length = config["max_sequence_length"] * 2
 
         if self.config.get("concat_history", False):
             # Concatenated_history has similar structure as history, except it
@@ -293,19 +313,19 @@ class VisDialDataset(Dataset):
                     concatenated_history[i].extend(history[j])
 
             max_history_length = (
-                self.config["max_sequence_length"] * 2 * len(history)
+                config["max_sequence_length"] * 2 * len(history)
             )
             history = concatenated_history
 
         history_lengths = [len(round_history) for round_history in history]
         maxpadded_history = torch.full(
             (len(history), max_history_length),
-            fill_value=self.vocabulary.PAD_INDEX,
+            fill_value=vocabulary.PAD_INDEX,
         )
         padded_history = pad_sequence(
             [torch.tensor(round_history) for round_history in history],
             batch_first=True,
-            padding_value=self.vocabulary.PAD_INDEX,
+            padding_value=vocabulary.PAD_INDEX,
         )
         maxpadded_history[:, : padded_history.size(1)] = padded_history
         return maxpadded_history, history_lengths
