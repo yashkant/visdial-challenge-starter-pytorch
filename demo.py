@@ -1,11 +1,9 @@
 import argparse
-import json
-import os
 
 import torch
 import yaml
+from mosestokenizer import MosesDetokenizer
 from torch import nn
-from nltk.tokenize.moses import MosesDetokenizer
 
 from visdialch.data.demo_object import DemoObject
 from visdialch.decoders import Decoder
@@ -143,6 +141,13 @@ while not break_loop:
     with torch.no_grad():
         output = model(batch)
 
+    answer = demo_object.vocabulary.to_words(output)
+    # TODO: Cite source here
+    with MosesDetokenizer('en') as detokenize:
+        answer = detokenize(answer)
+    print(f"Answer: {answer}")
+    demo_object.update(user_question, answer)
+
     while True:
         user_input = input("Continue? [(y)es/(n)o]: ")
         if user_input == 'y' or user_input == 'yes':
@@ -150,17 +155,3 @@ while not break_loop:
         elif user_input == 'n' or user_input == 'no':
             break_loop = True
             break
-
-
-
-
-if args.split == "val":
-    all_metrics = {}
-    all_metrics.update(sparse_metrics.retrieve(reset=True))
-    all_metrics.update(ndcg.retrieve(reset=True))
-    for metric_name, metric_value in all_metrics.items():
-        print(f"{metric_name}: {metric_value}")
-
-print("Writing ranks to {}".format(args.save_ranks_path))
-os.makedirs(os.path.dirname(args.save_ranks_path), exist_ok=True)
-json.dump(ranks_json, open(args.save_ranks_path, "w"))

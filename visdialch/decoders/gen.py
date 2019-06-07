@@ -6,6 +6,7 @@ class GenerativeDecoder(nn.Module):
     def __init__(self, config, vocabulary):
         super().__init__()
         self.config = config
+        self.vocabulary = vocabulary
 
         self.word_embed = nn.Embedding(
             len(vocabulary),
@@ -20,11 +21,10 @@ class GenerativeDecoder(nn.Module):
             dropout=config["dropout"],
         )
 
+        # Handle forward methods by mode in config.
         self.mode = None
-        if "mode" in config and config["mode"] == "demo":
+        if "mode" in config:
             self.mode = config["mode"]
-            self.ans_in = [vocabulary.SOS_INDEX]
-            self.eos_index = vocabulary.EOS_INDEX.long()
 
         self.lstm_to_words = nn.Linear(
             self.config["lstm_hidden_size"], len(vocabulary)
@@ -80,11 +80,11 @@ class GenerativeDecoder(nn.Module):
 
         elif self.mode is not None and self.mode == "demo":
 
-            batch_size, num_rounds = 1, 1
-            ans_in = self.ans_in
-            ans_in = ans_in.view(batch_size * num_rounds, ans_in.size()[-1])
+            ans_in = batch["ans_in"]
+            batch_size, num_rounds, sequence_length = ans_in.size()
+            ans_in = ans_in.view(batch_size * num_rounds, sequence_length)
 
-            # shape: (batch_size * num_rounds, max_sequence_length,
+            # shape: (batch_size * num_rounds, sequence_length,
             #         word_embedding_size)
             ans_in_embed = self.word_embed(ans_in)
 
@@ -100,19 +100,26 @@ class GenerativeDecoder(nn.Module):
             end_token_flag = False
             answer_indices = []
             while not end_token_flag:
-                # shape: (batch_size * num_rounds, max_sequence_length,
+                # shape: (batch_size * num_rounds, sequence_length,
                 #         lstm_hidden_size)
                 ans_out, (hidden, cell) = self.answer_rnn(
                     ans_in_embed, (init_hidden, init_cell)
                 )
+
+                # check shapes here! for h and c states
+                print(f"Shape of hidden and cell: "
+                      f"{hidden.size()}, {cell.size()}")
+                print(f"Shape of hidden and cell: "
+                      f"{init_hidden.size()}, {init_cell.size()}")
+
                 init_hidden, init_cell = hidden, cell
                 ans_out = self.dropout(ans_out)
                 ans_scores = self.lstm_to_words(ans_out)
                 _, ans_index = ans_scores.view(-1).max(0)
-                if torch.equal(ans_index.long(), self.eos_index):
+                if torch.equal(ans_index.long(), self.eos_index.long()):
                     end_token_flag = True
-                else:
                     answer_indices.append(ans_index)
+                else:
                     ans_in = ans_in.view(batch_size * num_rounds, ans_in.size()[-1])
                     ans_in_embed = self.word_embed(ans_in)
             return answer_indices

@@ -78,6 +78,9 @@ class DemoObject:
             data["ques"] = pad_question.long()
             data["ques_len"] = question_length.long()
 
+        ans_in = torch.tensor([self.vocabulary.SOS_INDEX]).long()
+        data["ans_in"] = ans_in.view(1, 1, 1)
+
         return data
 
     # Call this method as we have new dialogs in conversation.
