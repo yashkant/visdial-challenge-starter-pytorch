@@ -105,22 +105,23 @@ class GenerativeDecoder(nn.Module):
                 ans_out, (hidden, cell) = self.answer_rnn(
                     ans_in_embed, (init_hidden, init_cell)
                 )
-
-                # check shapes here! for h and c states
-                print(f"Shape of hidden and cell: "
-                      f"{hidden.size()}, {cell.size()}")
-                print(f"Shape of hidden and cell: "
-                      f"{init_hidden.size()}, {init_cell.size()}")
-
+                
+                # set the new states
                 init_hidden, init_cell = hidden, cell
+
+                # get the ans-idx from logits
                 ans_out = self.dropout(ans_out)
-                ans_scores = self.lstm_to_words(ans_out)
-                _, ans_index = ans_scores.view(-1).max(0)
-                if torch.equal(ans_index.long(), self.eos_index.long()):
+                ans_logits = self.lstm_to_words(ans_out)
+                _, ans_index = ans_logits.view(-1).max(0)
+                answer_indices.append(ans_index)
+                # print("ans_index:", ans_index, "eos:",self.vocabulary.EOS_INDEX )
+
+                # check if the answer end token is generated otherwise prepare
+                # ans_embed for next round
+                if ans_index.item() == self.vocabulary.EOS_INDEX or len(answer_indices) > 10:
                     end_token_flag = True
-                    answer_indices.append(ans_index)
                 else:
-                    ans_in = ans_in.view(batch_size * num_rounds, ans_in.size()[-1])
+                    ans_in = ans_index.view(batch_size * num_rounds, -1)
                     ans_in_embed = self.word_embed(ans_in)
             return answer_indices
 

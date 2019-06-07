@@ -110,8 +110,8 @@ decoder.word_embed = encoder.word_embed
 
 # Wrap encoder and decoder in a model.
 model = EncoderDecoderModel(encoder, decoder).to(device)
-if -1 not in args.gpu_ids:
-    model = nn.DataParallel(model, args.gpu_ids)
+# if -1 not in args.gpu_ids:
+#     model = nn.DataParallel(model, args.gpu_ids)
 
 model_state_dict, _ = load_checkpoint(args.load_pthpath)
 if isinstance(model, nn.DataParallel):
@@ -120,10 +120,6 @@ else:
     model.load_state_dict(model_state_dict)
 print("Loaded model from {}".format(args.load_pthpath))
 
-# Declare metric accumulators (won't be used if --split=test)
-sparse_metrics = SparseGTMetrics()
-ndcg = NDCG()
-
 # =============================================================================
 #   EVALUATION LOOP
 # =============================================================================
@@ -131,17 +127,24 @@ ndcg = NDCG()
 model.eval()
 break_loop = False
 
+print(f"Image Caption: {demo_object.get_caption()}")
 while not break_loop:
-    print(f"Image Caption: {demo_object.image_caption_nl()}")
     user_question = input("Type Question: ")
     batch = demo_object.get_data(user_question)
 
     for key in batch:
         batch[key] = batch[key].to(device)
+
+    # import pdb
+    # pdb.set_trace()
     with torch.no_grad():
         output = model(batch)
+    output = [word_idx.item() for word_idx in output]
 
-    answer = demo_object.vocabulary.to_words(output)
+    # Throw away the last token (<EOS>)
+    # TODO: Write a conditional to check if it is <EOS> 
+    answer = demo_object.vocabulary.to_words(output[:-1])
+    
     # TODO: Cite source here
     with MosesDetokenizer('en') as detokenize:
         answer = detokenize(answer)
@@ -149,7 +152,7 @@ while not break_loop:
     demo_object.update(user_question, answer)
 
     while True:
-        user_input = input("Continue? [(y)es/(n)o]: ")
+        user_input = input("Continue? [(y)es/(n)o]: ").lower()
         if user_input == 'y' or user_input == 'yes':
             break
         elif user_input == 'n' or user_input == 'no':

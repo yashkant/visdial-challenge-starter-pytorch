@@ -280,6 +280,7 @@ class VisDialDataset(Dataset):
         caption: List[int],
         questions: List[List[int]],
         answers: List[List[int]],
+        drop_last_item: bool = True,
     ):
         # Allow double length of caption, equivalent to a concatenated QA pair.
         caption = caption[: config["max_sequence_length"] * 2 - 1]
@@ -290,7 +291,7 @@ class VisDialDataset(Dataset):
             ]
 
         for i in range(len(answers)):
-            answers[i] = answers[i][: self.config["max_sequence_length"] - 1]
+            answers[i] = answers[i][: config["max_sequence_length"] - 1]
 
         # History for first round is caption, else concatenated QA pair of
         # previous round.
@@ -299,10 +300,11 @@ class VisDialDataset(Dataset):
         for question, answer in zip(questions, answers):
             history.append(question + answer + [vocabulary.EOS_INDEX])
         # Drop last entry from history (there's no eleventh question).
-        history = history[:-1]
+        if drop_last_item:
+            history = history[:-1]
         max_history_length = config["max_sequence_length"] * 2
 
-        if self.config.get("concat_history", False):
+        if config.get("concat_history", False):
             # Concatenated_history has similar structure as history, except it
             # contains concatenated QA pairs from previous rounds.
             concatenated_history = []

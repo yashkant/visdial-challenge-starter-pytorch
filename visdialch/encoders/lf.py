@@ -66,11 +66,9 @@ class LateFusionEncoder(nn.Module):
         hist = batch["hist"]
         # num_rounds = 10, even for test (padded dialog rounds at the end)
         batch_size, num_rounds, max_sequence_length = ques.size()
-
         # embed questions
         ques = ques.view(batch_size * num_rounds, max_sequence_length)
         ques_embed = self.word_embed(ques)
-
         # shape: (batch_size * num_rounds, max_sequence_length,
         #         lstm_hidden_size)
         _, (ques_embed, _) = self.ques_rnn(ques_embed, batch["ques_len"])
@@ -120,7 +118,7 @@ class LateFusionEncoder(nn.Module):
         img = attended_image_features
 
         # embed history
-        hist = hist.view(batch_size * num_rounds, max_sequence_length * 20)
+        hist = hist.view(batch_size * num_rounds, -1)
         hist_embed = self.word_embed(hist)
 
         # shape: (batch_size * num_rounds, lstm_hidden_size)

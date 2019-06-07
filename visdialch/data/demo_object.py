@@ -1,7 +1,4 @@
-# I think a single method that takes in image_path, caption and returns
-# image features, history and empty questions place-holder works.
-
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import torch
 from nltk.tokenize import word_tokenize
@@ -34,11 +31,10 @@ class DemoObject:
         self.hdf_reader = ImageFeaturesHdfReader(
             image_features_hdfpath, in_memory
         )
-        self.image_ids = list(self.dialogs_reader.dialogs.keys())
 
         # Store image features of the selected image in our object
-        self.image_id = self.image_ids[-3]
-        self.image_features = self.hdf_reader[self.selected_image_id]
+        image_id = self.hdf_reader.keys()[-2]
+        self.image_features = torch.tensor([self.hdf_reader[image_id]])
 
         # Make the call for the generating caption here.
         image_caption = "There is a cow in a green" \
@@ -55,14 +51,15 @@ class DemoObject:
         self.num_rounds = 0
         self.update()
 
-    # Call this method to retrive an object for inference, with the
+    # Call this method to retrive an object for inference, pass the
     # natural language question asked by the user.
-    def get_data(self, question=None):
+    def get_data(self, question: Optional[str] = None):
         data = {}
         data["img_feat"] = self.image_features
-        data["hist"] = self.history.long()
-        data["hist_len"] = torch.tensor(self.history_lengths).long()
-        data["num_rounds"] = torch.tensor(self.num_rounds).long()
+
+        # only pick the last entry as we process a single question at a time
+        data["hist"] = self.history[-1].view(1,1,-1).long()
+        data["hist_len"] = torch.tensor([self.history_lengths[-1]]).long()
 
         if question is not None:
             # Create field for current question, I think we need to place
@@ -75,44 +72,37 @@ class DemoObject:
                 self.vocabulary,
                 [question]
             )
-            data["ques"] = pad_question.long()
-            data["ques_len"] = question_length.long()
+            data["ques"] = pad_question.view(1, 1, -1).long()
+            data["ques_len"] = torch.tensor(question_length).long()
 
         ans_in = torch.tensor([self.vocabulary.SOS_INDEX]).long()
-        data["ans_in"] = ans_in.view(1, 1, 1)
+        data["ans_in"] = ans_in.view(1, 1, -1)
 
         return data
 
     # Call this method as we have new dialogs in conversation.
-    def update(self, question: str=None, answer: str=None):
+    def update(self, question: Optional[str] = None, answer: Optional[str] = None):
         if question is not None:
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)
-            pad_question, question_length = VisDialDataset._pad_sequences(
-                self.config,
-                self.vocabulary,
-                [question]
-            )
-            self.questions += pad_question
-            self.question_lengths += question_length
+            self.questions.append(question)
+            self.question_lengths.append(len(question))
 
         if answer is not None:
             answer = word_tokenize(answer)
             answer = self.vocabulary.to_indices(answer)
-            pad_answer, answer_length = VisDialDataset._pad_sequences(
-                self.config,
-                self.vocabulary,
-                [answer]
-            )
-            self.answers += pad_answer
-            self.answer_lengths += answer_length
+            self.answers.append(answer)
+            self.answer_lengths.append(len(answer))
 
+        # history does not take in padded inputs! 
         self.history, self.history_lengths = VisDialDataset._get_history(
+            self.config,
+            self.vocabulary,
             self.image_caption,
             self.questions,
-            self.answers
+            self.answers,
+            False
         )
-
         self.num_rounds += 1
 
     # Call this method to reset data
