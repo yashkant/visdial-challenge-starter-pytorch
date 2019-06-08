@@ -86,46 +86,45 @@ class GenerativeDecoder(nn.Module):
 
             # reshape encoder output to be set as initial hidden state of LSTM.
             # shape: (lstm_num_layers, 1 * 1, lstm_hidden_size)
-            init_hidden = encoder_output.view(1, batch_size * num_rounds, -1)
-            init_hidden = init_hidden.repeat(
+            hidden = encoder_output.view(1, batch_size * num_rounds, -1)
+            hidden = hidden.repeat(
                 self.config["lstm_num_layers"], 1, 1
             )
-            init_cell = torch.zeros_like(init_hidden)
+            cell = torch.zeros_like(hidden)
 
             # stop when any of the flags below is raised
             end_token_flag = False
             max_seq_len_flag = False
             answer_indices = []
 
-            while end_token_flag == False and max_seq_len_flag == False:
+            while end_token_flag is False and max_seq_len_flag is False:
 
                 # shape: (1*1, sequence_length)
                 ans_in = ans_in.view(batch_size * num_rounds, -1)
 
-                # shape: (1*1, sequence_length,
-                #         word_embedding_size)
+                # shape: (1*1, sequence_length, word_embedding_size)
                 ans_in_embed = self.word_embed(ans_in)
 
-
-                # shape: (1*1, sequence_length,
-                #         lstm_hidden_size)
+                # shape: (1*1, sequence_length, lstm_hidden_size)
+                # new states are updated in (hidden, cell)
                 ans_out, (hidden, cell) = self.answer_rnn(
-                    ans_in_embed, (init_hidden, init_cell)
+                    ans_in_embed, (hidden, cell)
                 )
                 
-                # set the new states
-                init_hidden, init_cell = hidden, cell
-
                 # get the ans-idx from logits
-                ans_out = self.dropout(ans_out)
-                ans_logits = self.lstm_to_words(ans_out)
-                _, ans_index = ans_logits.view(-1).max(0)
+                # ans_out = self.dropout(ans_out)
+                ans_scores = self.logsoftmax(self.lstm_to_words(ans_out))
+                ans_scores = torch.exp(ans_scores)
+
+                # TODO: remove <PAD>, <S> (for t > 0) and </S> (for t == 0)
+                _, ans_index = ans_scores.view(-1).max(0)
                 answer_indices.append(ans_index)
+                ans_in = ans_index
 
                 # check flag conditions and raise
                 if ans_index.item() == self.vocabulary.EOS_INDEX:
                     end_token_flag = True
-                if len(answer_indices) > 20:
+                if len(answer_indices) >= 20:
                     max_seq_len_flag = True
 
             return (end_token_flag, max_seq_len_flag), answer_indices

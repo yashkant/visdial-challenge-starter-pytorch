@@ -1,7 +1,8 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import torch
 from nltk.tokenize import word_tokenize
+from torch.nn.functional import normalize
 
 from visdialch.data import VisDialDataset
 from visdialch.data.readers import (
@@ -33,10 +34,15 @@ class DemoObject:
         )
 
         # Store image features of the selected image in our object
-        image_id = self.hdf_reader.keys()[-4]
-        print(f"Image id: {image_id}")
-        self.image_features = torch.tensor([self.hdf_reader[image_id]])
-
+        image_id = self.hdf_reader.keys()[-31]
+        print(f"Image id: {int(image_id)}")
+        image_features = torch.tensor(self.hdf_reader[image_id])
+        
+        if self.config["img_norm"]:
+            image_features = normalize(image_features, dim=0, p=2)
+        
+        self.image_features = image_features.unsqueeze(0)
+        
         # Make the call for the generating caption here.
         image_caption = "a group with drinks posing for a picture"
 
@@ -81,7 +87,16 @@ class DemoObject:
         return data
 
     # Call this method as we have new dialogs in conversation.
-    def update(self, question: Optional[str] = None, answer: Optional[str] = None):
+    def update(
+            self,
+            question: Optional[str] = None,
+            answer: Optional[str] = None,
+            caption: Optional[str] = None
+    ):
+        if caption is not None:
+            caption = word_tokenize(caption)
+            self.image_caption = self.vocabulary.to_indices(caption)
+
         if question is not None:
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)

@@ -127,18 +127,21 @@ print("Loaded model from {}".format(args.load_pthpath))
 model.eval()
 break_loop = False
 
-print(f"Image Caption: {demo_object.get_caption()}")
+input_image_caption = input("Enter Caption: ").lower()
+demo_object.update(caption=input_image_caption)
 while not break_loop:
-    user_question = input("Type Question: ")
+    user_question = input("Type Question: ").lower()
     batch = demo_object.get_data(user_question)
 
     for key in batch:
         batch[key] = batch[key].to(device)
-
+    # print(batch)
+    # import pdb
+    # pdb.set_trace()
     with torch.no_grad():
         (eos_flag, max_len_flag), output = model(batch)
     output = [word_idx.item() for word_idx in output]
-    answer = demo_object.vocabulary.to_words(output[:-1])
+    answer = demo_object.vocabulary.to_words(output)
 
     # Throw away the last token '<EOS>'
     if eos_flag:
@@ -148,7 +151,7 @@ while not break_loop:
     with MosesDetokenizer('en') as detokenize:
         answer = detokenize(answer)
     print(f"Answer: {answer}")
-    demo_object.update(user_question, answer)
+    demo_object.update(question=user_question, answer=answer)
 
     while True:
         user_input = input("Continue? [(y)es/(n)o]: ").lower()

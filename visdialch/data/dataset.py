@@ -315,8 +315,7 @@ class VisDialDataset(Dataset):
                     concatenated_history[i].extend(history[j])
 
             max_history_length = (
-                config["max_sequence_length"] * 2 * len(history)
-            )
+                config["max_sequence_length"] * 2 * 10            )
             history = concatenated_history
 
         history_lengths = [len(round_history) for round_history in history]
