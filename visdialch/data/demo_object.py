@@ -33,12 +33,12 @@ class DemoObject:
         )
 
         # Store image features of the selected image in our object
-        image_id = self.hdf_reader.keys()[-2]
+        image_id = self.hdf_reader.keys()[-4]
+        print(f"Image id: {image_id}")
         self.image_features = torch.tensor([self.hdf_reader[image_id]])
 
         # Make the call for the generating caption here.
-        image_caption = "There is a cow in a green" \
-                        " field eating grass."
+        image_caption = "a group with drinks posing for a picture"
 
         # Store the caption in natural language
         self.image_caption_nl = image_caption

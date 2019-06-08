@@ -80,27 +80,34 @@ class GenerativeDecoder(nn.Module):
 
         elif self.mode is not None and self.mode == "demo":
 
+            # batch_size, num_rounds are 1 throughout the demo loop
+            batch_size, num_rounds = 1, 1
             ans_in = batch["ans_in"]
-            batch_size, num_rounds, sequence_length = ans_in.size()
-            ans_in = ans_in.view(batch_size * num_rounds, sequence_length)
-
-            # shape: (batch_size * num_rounds, sequence_length,
-            #         word_embedding_size)
-            ans_in_embed = self.word_embed(ans_in)
 
             # reshape encoder output to be set as initial hidden state of LSTM.
-            # shape: (lstm_num_layers, batch_size * num_rounds,
-            #         lstm_hidden_size)
+            # shape: (lstm_num_layers, 1 * 1, lstm_hidden_size)
             init_hidden = encoder_output.view(1, batch_size * num_rounds, -1)
             init_hidden = init_hidden.repeat(
                 self.config["lstm_num_layers"], 1, 1
             )
             init_cell = torch.zeros_like(init_hidden)
 
+            # stop when any of the flags below is raised
             end_token_flag = False
+            max_seq_len_flag = False
             answer_indices = []
-            while not end_token_flag:
-                # shape: (batch_size * num_rounds, sequence_length,
+
+            while end_token_flag == False and max_seq_len_flag == False:
+
+                # shape: (1*1, sequence_length)
+                ans_in = ans_in.view(batch_size * num_rounds, -1)
+
+                # shape: (1*1, sequence_length,
+                #         word_embedding_size)
+                ans_in_embed = self.word_embed(ans_in)
+
+
+                # shape: (1*1, sequence_length,
                 #         lstm_hidden_size)
                 ans_out, (hidden, cell) = self.answer_rnn(
                     ans_in_embed, (init_hidden, init_cell)
@@ -114,16 +121,14 @@ class GenerativeDecoder(nn.Module):
                 ans_logits = self.lstm_to_words(ans_out)
                 _, ans_index = ans_logits.view(-1).max(0)
                 answer_indices.append(ans_index)
-                # print("ans_index:", ans_index, "eos:",self.vocabulary.EOS_INDEX )
 
-                # check if the answer end token is generated otherwise prepare
-                # ans_embed for next round
-                if ans_index.item() == self.vocabulary.EOS_INDEX or len(answer_indices) > 10:
+                # check flag conditions and raise
+                if ans_index.item() == self.vocabulary.EOS_INDEX:
                     end_token_flag = True
-                else:
-                    ans_in = ans_index.view(batch_size * num_rounds, -1)
-                    ans_in_embed = self.word_embed(ans_in)
-            return answer_indices
+                if len(answer_indices) > 20:
+                    max_seq_len_flag = True
+
+            return (end_token_flag, max_seq_len_flag), answer_indices
 
         else:
 

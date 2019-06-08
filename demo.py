@@ -135,15 +135,14 @@ while not break_loop:
     for key in batch:
         batch[key] = batch[key].to(device)
 
-    # import pdb
-    # pdb.set_trace()
     with torch.no_grad():
-        output = model(batch)
+        (eos_flag, max_len_flag), output = model(batch)
     output = [word_idx.item() for word_idx in output]
-
-    # Throw away the last token (<EOS>)
-    # TODO: Write a conditional to check if it is <EOS> 
     answer = demo_object.vocabulary.to_words(output[:-1])
+
+    # Throw away the last token '<EOS>'
+    if eos_flag:
+        answer = answer[:-1]
     
     # TODO: Cite source here
     with MosesDetokenizer('en') as detokenize:
