@@ -39,6 +39,9 @@ class GenerativeDecoder(nn.Module):
 
         During evaluation, assign log-likelihood scores to all answer options.
 
+        During demo, generate sequences from an initial <SOS> token and
+        encoding.
+
         Parameters
         ----------
         encoder_output: torch.Tensor
@@ -92,39 +95,50 @@ class GenerativeDecoder(nn.Module):
             )
             cell = torch.zeros_like(hidden)
 
-            # stop when any of the flags below is raised
             end_token_flag = False
             max_seq_len_flag = False
             answer_indices = []
 
             while end_token_flag is False and max_seq_len_flag is False:
 
-                # shape: (1*1, sequence_length)
+                # shape: (1*1, 1)
                 ans_in = ans_in.view(batch_size * num_rounds, -1)
 
-                # shape: (1*1, sequence_length, word_embedding_size)
+                # shape: (1*1, 1, word_embedding_size)
                 ans_in_embed = self.word_embed(ans_in)
 
-                # shape: (1*1, sequence_length, lstm_hidden_size)
+                # shape: (1*1, 1, lstm_hidden_size)
                 # new states are updated in (hidden, cell)
                 ans_out, (hidden, cell) = self.answer_rnn(
                     ans_in_embed, (hidden, cell)
                 )
                 
-                # get the ans-idx from logits
-                # ans_out = self.dropout(ans_out)
+                # calculate answer probabilities
                 ans_scores = self.logsoftmax(self.lstm_to_words(ans_out))
-                ans_scores = torch.exp(ans_scores)
+                ans_probs = torch.exp(ans_scores)
+                ans_probs = ans_probs.view(-1)
 
-                # TODO: remove <PAD>, <S> (for t > 0) and </S> (for t == 0)
-                _, ans_index = ans_scores.view(-1).max(0)
+                # for initial time-step prevent PAD, SOS and EOS from
+                # outputting, indices to remove are [PAD:0, SOS:1, EOS:2]
+                if len(answer_indices) == 0:
+                    ans_probs = ans_probs[3:]
+                    _, ans_index = ans_probs.max(0)
+                    ans_index += 3
+
+                # for non-initial time-steps prevent PAD and SOS from
+                # outputting, indices to remove are [PAD:0, SOS:1]
+                else:
+                    ans_probs = ans_probs[2:]
+                    _, ans_index = ans_probs.max(0)
+                    ans_index += 2
+
                 answer_indices.append(ans_index)
                 ans_in = ans_index
 
                 # check flag conditions and raise
                 if ans_index.item() == self.vocabulary.EOS_INDEX:
                     end_token_flag = True
-                if len(answer_indices) >= 20:
+                if len(answer_indices) > 20:
                     max_seq_len_flag = True
 
             return (end_token_flag, max_seq_len_flag), answer_indices

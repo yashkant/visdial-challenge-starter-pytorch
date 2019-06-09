@@ -93,7 +93,7 @@ for arg in vars(args):
     print("{:<20}: {}".format(arg, getattr(args, arg)))
 
 # =============================================================================
-#   SETUP DATASET, DATALOADER, MODEL
+#   LOAD MODEL
 # =============================================================================
 
 demo_object = DemoObject(config["dataset"])
@@ -108,10 +108,9 @@ print("Decoder: {}".format(config["model"]["decoder"]))
 # Share word embedding between encoder and decoder.
 decoder.word_embed = encoder.word_embed
 
-# Wrap encoder and decoder in a model.
+# Wrap encoder and decoder in a model. Don't use nn.DataParallel
+# since batch_size is 1 for all runs.
 model = EncoderDecoderModel(encoder, decoder).to(device)
-# if -1 not in args.gpu_ids:
-#     model = nn.DataParallel(model, args.gpu_ids)
 
 model_state_dict, _ = load_checkpoint(args.load_pthpath)
 if isinstance(model, nn.DataParallel):
@@ -135,9 +134,7 @@ while not break_loop:
 
     for key in batch:
         batch[key] = batch[key].to(device)
-    # print(batch)
-    # import pdb
-    # pdb.set_trace()
+
     with torch.no_grad():
         (eos_flag, max_len_flag), output = model(batch)
     output = [word_idx.item() for word_idx in output]
@@ -147,16 +144,9 @@ while not break_loop:
     if eos_flag:
         answer = answer[:-1]
     
-    # TODO: Cite source here
+    # MosesDetokenizer used to detokenize, it is separated from nltk.
+    # Refer: https://pypi.org/project/mosestokenizer/
     with MosesDetokenizer('en') as detokenize:
         answer = detokenize(answer)
     print(f"Answer: {answer}")
     demo_object.update(question=user_question, answer=answer)
-
-    while True:
-        user_input = input("Continue? [(y)es/(n)o]: ").lower()
-        if user_input == 'y' or user_input == 'yes':
-            break
-        elif user_input == 'n' or user_input == 'no':
-            break_loop = True
-            break
