@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from visdialch.utils.beam_search import BeamSearch
+from typing import Dict, Tuple
 
 
 class GenerativeDecoder(nn.Module):
@@ -7,6 +9,16 @@ class GenerativeDecoder(nn.Module):
         super().__init__()
         self.config = config
         self.vocabulary = vocabulary
+
+        # TODO: get beam-search from config file
+        self.use_beam_search = True
+
+        if self.use_beam_search:
+            self.beam_search = BeamSearch(
+                vocabulary.EOS_INDEX,
+                max_steps=20,
+                beam_size=10
+            )
 
         self.word_embed = nn.Embedding(
             len(vocabulary),
@@ -99,6 +111,18 @@ class GenerativeDecoder(nn.Module):
             max_seq_len_flag = False
             answer_indices = []
 
+            if self.use_beam_search:
+                # build the state
+                state = {"hidden": hidden, "cell": cell}
+                # TODO: try making the batch_size, num_rounds implicit
+                log_probabilities, all_top_k_predictions = \
+                    self._beam_search(state, batch_size, num_rounds)
+                # select the output sequences
+                _, select_indices = log_probabilities.max(-1)
+                answer_indices = all_top_k_predictions[:][select_indices]\
+                    .view(-1)
+                return (True, False), answer_indices
+
             while end_token_flag is False and max_seq_len_flag is False:
 
                 # shape: (1*1, 1)
@@ -112,7 +136,7 @@ class GenerativeDecoder(nn.Module):
                 ans_out, (hidden, cell) = self.answer_rnn(
                     ans_in_embed, (hidden, cell)
                 )
-                
+
                 # calculate answer probabilities
                 ans_scores = self.logsoftmax(self.lstm_to_words(ans_out))
                 ans_probs = torch.exp(ans_scores)
@@ -193,10 +217,82 @@ class GenerativeDecoder(nn.Module):
                 ans_word_scores, -1, target_ans_out.unsqueeze(-1)
             ).squeeze()
             ans_word_scores = (
-                ans_word_scores * (target_ans_out > 0).float().cuda()
+                    ans_word_scores * (target_ans_out > 0).float().cuda()
             )  # ugly
 
             ans_scores = torch.sum(ans_word_scores, -1)
             ans_scores = ans_scores.view(batch_size, num_rounds, num_options)
 
             return ans_scores
+
+    def _beam_search(self, state, batch_size, num_rounds):
+        # TODO: Mention source and add comments and add arg hints
+        start_preds = torch.new_full(
+            (batch_size * num_rounds,),
+            self.vocabulary.SOS_INDEX
+        )
+
+        # shape (all_top_k_predictions):
+        # (batch_size * num_rounds, beam_size, max_length)
+        # shape (log_probabilities):
+        # (batch_size * num_rounds, beam_size)
+        all_top_k_predictions, log_probabilities = self.beam_search.search(
+            start_preds,
+            state,
+            self._take_step
+        )
+
+        return log_probabilities, all_top_k_predictions
+
+    def _take_step(self,
+                   last_predictions: torch.Tensor,
+                   state: Dict[str, torch.Tensor])\
+            -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """
+        Take a decoding step. This is called by the beam search class.
+
+        Parameters
+        ----------
+        last_predictions : ``torch.Tensor``
+            A tensor of shape ``(group_size,)``, which gives the indices of the predictions
+            during the last time step.
+        state : ``Dict[str, torch.Tensor]``
+            A dictionary of tensors that contain the current state information
+            needed to predict the next step, which includes the encoder outputs,
+            the source mask, and the decoder hidden state and context. Each of these
+            tensors has shape ``(group_size, *)``, where ``*`` can be any other number
+            of dimensions.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, Dict[str, torch.Tensor]]
+            A tuple of ``(log_probabilities, updated_state)``, where ``log_probabilities``
+            is a tensor of shape ``(group_size, num_classes)`` containing the predicted
+            log probability of each class for the next step, for each item in the group,
+            while ``updated_state`` is a dictionary of tensors containing the encoder outputs,
+            source mask, and updated decoder hidden state and context.
+
+        Notes
+        -----
+            We treat the inputs as a batch, even though ``group_size`` is not necessarily
+            equal to ``batch_size``, since the group may contain multiple states
+            for each source sentence in the batch.
+        """
+        # TODO: Mention source, add comments, fix line width
+
+        # shape: (group_size, 1, word_embedding_size)
+        last_predictions_embed = self.word_embed(last_predictions).unsqueeze(1)
+
+        # take the rnn step and update state dict
+        output, (hidden, cell) = self.answer_rnn(
+            last_predictions_embed,
+            (state["hidden"], state["cell"])
+        )
+        state['hidden'], state["cell"] = hidden, cell
+
+        # compute the class log probabilities
+        # shape: (group_size, num_vocab)
+        output_projections = self.lstm_to_words(output)
+        class_log_probabilities = self.logsoftmax(output_projections)
+
+        return class_log_probabilities, state
