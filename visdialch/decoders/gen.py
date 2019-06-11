@@ -117,7 +117,7 @@ class GenerativeDecoder(nn.Module):
                 # TODO: try making the batch_size, num_rounds implicit
                 log_probabilities, all_top_k_predictions = \
                     self._beam_search(state, batch_size, num_rounds)
-                # select the output sequences
+                # select the output sequence
                 _, select_indices = log_probabilities.max(-1)
                 answer_indices = all_top_k_predictions[:][select_indices]\
                     .view(-1)
@@ -225,7 +225,12 @@ class GenerativeDecoder(nn.Module):
 
             return ans_scores
 
-    def _beam_search(self, state, batch_size, num_rounds):
+    def _beam_search(
+            self,
+            state: Dict[str, torch.Tensor],
+            batch_size: int,
+            num_rounds: int
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         # TODO: Mention source and add comments and add arg hints
         start_preds = torch.new_full(
             (batch_size * num_rounds,),
@@ -244,10 +249,11 @@ class GenerativeDecoder(nn.Module):
 
         return log_probabilities, all_top_k_predictions
 
-    def _take_step(self,
-                   last_predictions: torch.Tensor,
-                   state: Dict[str, torch.Tensor])\
-            -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    def _take_step(
+            self,
+            last_predictions: torch.Tensor,
+            state: Dict[str, torch.Tensor]
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """
         Take a decoding step. This is called by the beam search class.
 
