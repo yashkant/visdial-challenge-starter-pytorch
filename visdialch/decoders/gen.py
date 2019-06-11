@@ -10,10 +10,10 @@ class GenerativeDecoder(nn.Module):
         self.config = config
         self.vocabulary = vocabulary
 
-        # TODO: get beam-search from config file
-        self.use_beam_search = True
+        self.use_beam_search = config["beam_search"]
 
         if self.use_beam_search:
+            print(f"Using Beam Search")
             self.beam_search = BeamSearch(
                 vocabulary.EOS_INDEX,
                 max_steps=20,
@@ -114,13 +114,15 @@ class GenerativeDecoder(nn.Module):
             if self.use_beam_search:
                 # build the state
                 state = {"hidden": hidden, "cell": cell}
-                # TODO: try making the batch_size, num_rounds implicit
-                log_probabilities, all_top_k_predictions = \
-                    self._beam_search(state, batch_size, num_rounds)
+                log_probabilities, all_top_k_predictions = (
+                    self._beam_search(state, ans_in, batch_size, num_rounds)
+                )
                 # select the output sequence
                 _, select_indices = log_probabilities.max(-1)
-                answer_indices = all_top_k_predictions[:][select_indices]\
-                    .view(-1)
+                answer_indices = (
+                    all_top_k_predictions[:,select_indices]
+                    .view(batch_size, num_rounds, -1)
+                )
                 return (True, False), answer_indices
 
             while end_token_flag is False and max_seq_len_flag is False:
@@ -228,14 +230,16 @@ class GenerativeDecoder(nn.Module):
     def _beam_search(
             self,
             state: Dict[str, torch.Tensor],
+            ans_in: torch.Tensor,
             batch_size: int,
             num_rounds: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # TODO: Mention source and add comments and add arg hints
-        start_preds = torch.new_full(
-            (batch_size * num_rounds,),
-            self.vocabulary.SOS_INDEX
-        )
+        start_preds = ans_in.view(batch_size*num_rounds,)
+
+        # reshape: (batch_size * num_rounds, lstm_num_layers, lstm_hidden_size)
+        state["hidden"] = state["hidden"].permute(1,0,2)
+        state["cell"] = state["cell"].permute(1,0,2)
 
         # shape (all_top_k_predictions):
         # (batch_size * num_rounds, beam_size, max_length)
@@ -260,45 +264,59 @@ class GenerativeDecoder(nn.Module):
         Parameters
         ----------
         last_predictions : ``torch.Tensor``
-            A tensor of shape ``(group_size,)``, which gives the indices of the predictions
-            during the last time step.
+            A tensor of shape ``(group_size,)``, which gives the indices of
+            the predictions during the last time step.
         state : ``Dict[str, torch.Tensor]``
-            A dictionary of tensors that contain the current state information
-            needed to predict the next step, which includes the encoder outputs,
-            the source mask, and the decoder hidden state and context. Each of these
-            tensors has shape ``(group_size, *)``, where ``*`` can be any other number
-            of dimensions.
+            A dictionary of tensors that contain the current state
+            information needed to predict the next step, which includes the
+            encoder outputs, the source mask, and the decoder hidden state
+            and context. Each of these tensors has shape ``(group_size, *)``,
+            where ``*`` can be any other number of dimensions.
 
         Returns
         -------
         Tuple[torch.Tensor, Dict[str, torch.Tensor]]
-            A tuple of ``(log_probabilities, updated_state)``, where ``log_probabilities``
-            is a tensor of shape ``(group_size, num_classes)`` containing the predicted
-            log probability of each class for the next step, for each item in the group,
-            while ``updated_state`` is a dictionary of tensors containing the encoder outputs,
-            source mask, and updated decoder hidden state and context.
+            A tuple of ``(log_probabilities, updated_state)``, where
+            ``log_probabilities`` is a tensor of shape ``(group_size,
+            num_classes)`` containing the predicted log probability of each
+            class for the next step, for each item in the group,
+            while ``updated_state`` is a dictionary of tensors containing the
+            encoder outputs, source mask, and updated decoder hidden state
+            and context.
 
         Notes
         -----
-            We treat the inputs as a batch, even though ``group_size`` is not necessarily
-            equal to ``batch_size``, since the group may contain multiple states
-            for each source sentence in the batch.
+            We treat the inputs as a batch, even though ``group_size`` is not
+            necessarily equal to ``batch_size``, since the group may contain
+            multiple states for each source sentence in the batch.
         """
         # TODO: Mention source, add comments, fix line width
-
-        # shape: (group_size, 1, word_embedding_size)
+        # shape: (group_size, seq_len=1, word_embedding_size)
+        last_predictions = last_predictions.long()
         last_predictions_embed = self.word_embed(last_predictions).unsqueeze(1)
 
-        # take the rnn step and update state dict
+        # reshape states to feed them into RNN: 
+        # (lstm_num_layers, batch_size * num_rounds, lstm_hidden_size)
+        hidden, cell = (
+            state["hidden"].permute(1,0,2).contiguous(),
+            state["cell"].permute(1,0,2).contiguous()
+        )
+
+        # take the rnn step
         output, (hidden, cell) = self.answer_rnn(
             last_predictions_embed,
-            (state["hidden"], state["cell"])
+            (hidden, cell)
         )
-        state['hidden'], state["cell"] = hidden, cell
+
+        # reshape and update state dict
+        # shape: (batch_size * num_rounds, lstm_num_layers, lstm_hidden_size)
+        state["hidden"], state["cell"] = (
+            hidden.permute(1,0,2), cell.permute(1,0,2)
+        )
 
         # compute the class log probabilities
         # shape: (group_size, num_vocab)
-        output_projections = self.lstm_to_words(output)
+        output_projections = self.lstm_to_words(output).squeeze(1)
         class_log_probabilities = self.logsoftmax(output_projections)
 
         return class_log_probabilities, state
