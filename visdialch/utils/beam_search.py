@@ -40,11 +40,13 @@ class BeamSearch:
                  end_index: int,
                  max_steps: int = 50,
                  beam_size: int = 10,
+                 vocabulary = None,
                  per_node_beam_size: int = None) -> None:
         self._end_index = end_index
         self.max_steps = max_steps
         self.beam_size = beam_size
         self.per_node_beam_size = per_node_beam_size or beam_size
+        self.vocab = vocabulary
 
     def search(self,
                start_predictions: torch.Tensor,
@@ -153,6 +155,11 @@ class BeamSearch:
         # shape: [(batch_size, beam_size)]
         predictions.append(start_predicted_classes)
 
+        print("----(start) beam at t = 0----")
+        for word, prob in zip(start_predicted_classes[0], last_log_probabilities[0]):
+            print(f"word: {self.vocab.to_words([word.item()])[0]} | prob: {torch.exp(prob)}")
+        print("----(stop) beam at t = 0----")
+
         # Log probability tensor that mandates that the end token is selected.
         # shape: (batch_size * beam_size, num_classes)
         log_probs_after_end = start_class_log_probabilities.new_full(
@@ -171,6 +178,8 @@ class BeamSearch:
                     reshape(batch_size * self.beam_size, *last_dims)
 
         for timestep in range(self.max_steps - 1):
+            print(f"----(start) beam at t = {timestep+1}----")
+
             # shape: (batch_size * beam_size,)
             last_predictions = (
                 predictions[-1].reshape(batch_size * self.beam_size)
@@ -250,6 +259,12 @@ class BeamSearch:
             # shape: (batch_size, beam_size)
             last_log_probabilities = restricted_beam_log_probs
 
+            restricted_expanded_last_log_probabilities = (
+                top_log_probabilities
+                .reshape(batch_size, self.beam_size * self.per_node_beam_size)
+                .gather(1, restricted_beam_indices)
+            )
+
             # The beam indices come from a `beam_size * per_node_beam_size`
             # dimension where the indices with a common ancestor are grouped
             # together. Hence dividing by per_node_beam_size gives the
@@ -258,6 +273,19 @@ class BeamSearch:
             backpointer = restricted_beam_indices / self.per_node_beam_size
 
             backpointers.append(backpointer)
+
+            for word, prob, seq_prob, prev_word in zip(
+                    restricted_predicted_classes[0],
+                    restricted_expanded_last_log_probabilities[0],
+                    restricted_beam_log_probs[0],
+                    backpointer[0]
+            ):
+                prev_word_idx = predictions[-2][0][prev_word.item()].item()
+                print(f"word: {self.vocab.to_words([word.item()])[0]} | "
+                      f"prob: {torch.exp(prob)} | seq_prob_until: {torch.exp(seq_prob)}| "
+                      f"prev_word: {self.vocab.to_words([prev_word_idx])[0]}")
+
+            print(f"----(stop) beam at t = {timestep+1}----")
 
             # Keep only the pieces of the state tensors corresponding to the
             # ancestors created this iteration.

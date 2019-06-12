@@ -18,7 +18,8 @@ class GenerativeDecoder(nn.Module):
             self.beam_search = BeamSearch(
                 vocabulary.EOS_INDEX,
                 max_steps=20,
-                beam_size=config["beam_size"]
+                beam_size=config["beam_size"],
+                vocabulary=vocabulary
             )
 
         self.word_embed = nn.Embedding(

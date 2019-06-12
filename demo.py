@@ -144,7 +144,7 @@ while not break_loop:
     if eos_flag:
         first_eos_idx = answer.index(demo_object.vocabulary.EOS_TOKEN)
         answer = answer[:first_eos_idx]
-    
+    print("Tokenized Answer: ", answer)
     # MosesDetokenizer used to detokenize, it is separated from nltk.
     # Refer: https://pypi.org/project/mosestokenizer/
     with MosesDetokenizer('en') as detokenize:
