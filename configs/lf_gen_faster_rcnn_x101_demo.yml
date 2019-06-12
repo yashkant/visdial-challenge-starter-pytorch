@@ -22,5 +22,6 @@ model:
   lstm_num_layers: 2
   dropout: 0.2
   beam_search: true
+  beam_size: 10
 
 # Add Feature Extractor and Image Captioning args later
