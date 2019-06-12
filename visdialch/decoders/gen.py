@@ -13,11 +13,12 @@ class GenerativeDecoder(nn.Module):
         self.use_beam_search = config["beam_search"]
 
         if self.use_beam_search:
-            print(f"Using Beam Search")
+            self.beam_size = config["beam_size"]
+            print(f"Using Beam Search with beam size: {self.beam_size}")
             self.beam_search = BeamSearch(
                 vocabulary.EOS_INDEX,
                 max_steps=20,
-                beam_size=10
+                beam_size=config["beam_size"]
             )
 
         self.word_embed = nn.Embedding(
@@ -118,11 +119,12 @@ class GenerativeDecoder(nn.Module):
                     self._beam_search(state, ans_in, batch_size, num_rounds)
                 )
                 # select the output sequence
-                _, select_indices = log_probabilities.max(-1)
+                log_prob, select_indices = log_probabilities.max(-1)
                 answer_indices = (
                     all_top_k_predictions[:,select_indices]
                     .view(batch_size, num_rounds, -1)
                 )
+                # TODO: Fix the flag conditions below
                 return (True, False), answer_indices
 
             while end_token_flag is False and max_seq_len_flag is False:
@@ -167,6 +169,7 @@ class GenerativeDecoder(nn.Module):
                 if len(answer_indices) > 20:
                     max_seq_len_flag = True
 
+            answer_indices = torch.LongTensor(answer_indices)
             return (end_token_flag, max_seq_len_flag), answer_indices
 
         else:
