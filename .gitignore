@@ -40,3 +40,7 @@ ENV/
 
 # Pycharm
 .idea/*
+
+# Captioning data
+captioning/model_data/
+

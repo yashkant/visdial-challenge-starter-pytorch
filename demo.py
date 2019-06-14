@@ -11,6 +11,7 @@ from visdialch.encoders import Encoder
 from visdialch.metrics import SparseGTMetrics, NDCG
 from visdialch.model import EncoderDecoderModel
 from visdialch.utils.checkpointing import load_checkpoint
+from captioning.caption import PythiaCaptioning
 
 parser = argparse.ArgumentParser(
     "Evaluate and/or generate EvalAI submission file."
