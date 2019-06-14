@@ -137,12 +137,13 @@ while not break_loop:
 
     with torch.no_grad():
         (eos_flag, max_len_flag), output = model(batch)
-    output = [word_idx.item() for word_idx in output]
+    output = [word_idx.item() for word_idx in output.reshape(-1)]
     answer = demo_object.vocabulary.to_words(output)
 
-    # Throw away the last token '<EOS>'
+    # Throw away the trailing '<EOS>' tokens
     if eos_flag:
-        answer = answer[:-1]
+        first_eos_idx = answer.index(demo_object.vocabulary.EOS_TOKEN)
+        answer = answer[:first_eos_idx]
     
     # MosesDetokenizer used to detokenize, it is separated from nltk.
     # Refer: https://pypi.org/project/mosestokenizer/

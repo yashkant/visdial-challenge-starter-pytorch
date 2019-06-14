@@ -34,7 +34,7 @@ class DemoObject:
         )
 
         # Store image features of the selected image in our object
-        image_id = self.hdf_reader.keys()[-31]
+        image_id = self.hdf_reader.keys()[-14]
         print(f"Image id: {int(image_id)}")
         image_features = torch.tensor(self.hdf_reader[image_id])
         
