@@ -43,4 +43,4 @@ ENV/
 
 # Captioning data
 captioning/model_data/
-
+captioning/detectron/

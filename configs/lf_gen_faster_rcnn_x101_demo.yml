@@ -24,4 +24,13 @@ model:
   beam_search: true
   beam_size: 10
 
-# Add Feature Extractor and Image Captioning args later
+# Captioning related arguments
+captioning:
+  model_data_dir: '../../'
+  text_caption_processor_vocab_txt: 'captioning/model_data/vocabulary_captioning_thresh5.txt'
+  butd_model:
+    config_yaml: 'captioning/model_data/butd.yaml'
+    model_pth: 'captioning/model_data/butd.pth'
+  detectron_model:
+    config_yaml: 'captioning/model_data/detectron_model.yaml'
+    model_pth: 'captioning/model_data/detectron_model.pth'

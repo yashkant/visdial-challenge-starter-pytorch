@@ -35,13 +35,14 @@ class PythiaCaptioning:
   CHANNEL_MEAN = [0.485, 0.456, 0.406]
   CHANNEL_STD = [0.229, 0.224, 0.225]
   
-  def __init__(self):
+  def __init__(self, caption_config):
+    self.caption_config = caption_config
     self._init_processors()
     self.pythia_model = self._build_pythia_model()
     self.detection_model = self._build_detection_model()
     
   def _init_processors(self):
-    with open("/content/model_data/butd.yaml") as f:
+    with open(self.caption_config["butd_model"]["config_yaml"]) as f:
       config = yaml.load(f)
     
     config = ConfigNode(config)
@@ -54,9 +55,9 @@ class PythiaCaptioning:
     captioning_config = config.task_attributes.captioning.dataset_attributes.coco
     text_processor_config = captioning_config.processors.text_processor
     caption_processor_config = captioning_config.processors.caption_processor
-    
-    text_processor_config.params.vocab.vocab_file = "/content/model_data/vocabulary_captioning_thresh5.txt"
-    caption_processor_config.params.vocab.vocab_file = "/content/model_data/vocabulary_captioning_thresh5.txt"
+    vocab_file_path = self.caption_config["text_caption_processor_vocab_txt"]
+    text_processor_config.params.vocab.vocab_file = vocab_file_path
+    caption_processor_config.params.vocab.vocab_file = vocab_file_path
     self.text_processor = VocabProcessor(text_processor_config.params)
     self.caption_processor = CaptionProcessor(caption_processor_config.params)
 
@@ -64,9 +65,9 @@ class PythiaCaptioning:
     registry.register("coco_caption_processor", self.caption_processor)
     
   def _build_pythia_model(self):
-    state_dict = torch.load('/content/model_data/butd.pth')
+    state_dict = torch.load(self.caption_config["butd_model"]["model_pth"])
     model_config = self.config.model_attributes.butd
-    model_config.model_data_dir = "/content/"
+    model_config.model_data_dir = self.caption_config["model_data_dir"]
     model = BUTD(model_config)
     model.build()
     model.init_losses_and_metrics()
@@ -113,11 +114,11 @@ class PythiaCaptioning:
   
   def _build_detection_model(self):
 
-      cfg.merge_from_file('/content/model_data/detectron_model.yaml')
+      cfg.merge_from_file(self.caption_config["detectron_model"]["config_yaml"])
       cfg.freeze()
 
       model = build_detection_model(cfg)
-      checkpoint = torch.load('/content/model_data/detectron_model.pth', 
+      checkpoint = torch.load(self.caption_config["detectron_model"]["model_pth"], 
                               map_location=torch.device("cpu"))
 
       load_state_dict(model, checkpoint.pop("model"))
