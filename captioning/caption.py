@@ -4,14 +4,14 @@ import torch.nn.functional as F
 import yaml
 from maskrcnn_benchmark.config import cfg
 from maskrcnn_benchmark.modeling.detector import build_detection_model
-from maskrcnn_benchmark.structures.image_list import to_image_list
 from maskrcnn_benchmark.utils.model_serialization import load_state_dict
 from pythia.common.registry import registry
 from pythia.common.sample import Sample, SampleList
 from pythia.models.butd import BUTD
 from pythia.tasks.processors import VocabProcessor, CaptionProcessor
 from pythia.utils.configuration import ConfigNode
-from utils import get_actual_image, image_transform, process_feature_extraction
+from utils import get_detectron_features
+
 
 class PythiaCaptioning:
     TARGET_IMAGE_SIZE = [448, 448]
@@ -78,7 +78,7 @@ class PythiaCaptioning:
 
     def predict(self, url):
         with torch.no_grad():
-            detectron_features = self.get_detectron_features(url)
+            detectron_features = get_detectron_features(url, self.detection_model)
 
             sample = Sample()
             sample.dataset_name = "coco"
@@ -119,14 +119,3 @@ class PythiaCaptioning:
         x1_sum = torch.sum(x1, dim=1, keepdim=True)
         y = x1 / x1_sum
         return y
-
-    def get_detectron_features(self, image_path):
-        im, im_scale = image_transform(image_path)
-        img_tensor, im_scales = [im], [im_scale]
-        current_img_list = to_image_list(img_tensor, size_divisible=32)
-        current_img_list = current_img_list.to('cuda')
-        with torch.no_grad():
-            output = self.detection_model(current_img_list)
-        feat_list = process_feature_extraction(output, im_scales,
-                                                     'fc6', 0.2)
-        return feat_list[0]

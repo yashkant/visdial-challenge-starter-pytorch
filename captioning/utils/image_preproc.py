@@ -4,6 +4,7 @@ import torch
 import requests
 from PIL import Image
 from maskrcnn_benchmark.layers import nms
+from maskrcnn_benchmark.structures.image_list import to_image_list
 
 
 def get_actual_image(image_path):
@@ -70,3 +71,14 @@ def process_feature_extraction(output,
         keep_boxes = torch.argsort(max_conf, descending=True)[:100]
         feat_list.append(feats[i][keep_boxes])
     return feat_list
+
+
+def get_detectron_features(image_path, detection_model):
+    im, im_scale = image_transform(image_path)
+    img_tensor, im_scales = [im], [im_scale]
+    current_img_list = to_image_list(img_tensor, size_divisible=32)
+    current_img_list = current_img_list.to('cuda')
+    with torch.no_grad():
+        output = detection_model(current_img_list)
+    feat_list = process_feature_extraction(output, im_scales, 'fc6', 0.2)
+    return feat_list[0]
