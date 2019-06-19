@@ -11,7 +11,6 @@ from visdialch.encoders import Encoder
 from visdialch.metrics import SparseGTMetrics, NDCG
 from visdialch.model import EncoderDecoderModel
 from visdialch.utils.checkpointing import load_checkpoint
-from captioning.caption import PythiaCaptioning
 
 parser = argparse.ArgumentParser(
     "Evaluate and/or generate EvalAI submission file."
@@ -30,11 +29,11 @@ parser.add_argument(
     help="Path to .pth file of pretrained checkpoint.",
 )
 
-# parser.add_argument(
-#     "--load-imagepath",
-#     default="checkpoints/checkpoint_xx.pth",
-#     help="Path to .pth file of pretrained checkpoint.",
-# )
+parser.add_argument(
+    "--imagepath",
+    default="/nethome/ykant3/tmp/COCO_test2014_000000355148.jpg",
+    help="Path to .pth file of pretrained checkpoint.",
+)
 
 parser.add_argument_group(
     "Arguments independent of experiment reproducibility"
@@ -97,7 +96,7 @@ for arg in vars(args):
 #   LOAD MODEL
 # =============================================================================
 
-demo_object = DemoObject(config["dataset"])
+demo_object = DemoObject(config)
 
 # Pass vocabulary to construct Embedding layer.
 encoder = Encoder(config["model"], demo_object.vocabulary)
@@ -127,12 +126,15 @@ print("Loaded model from {}".format(args.load_pthpath))
 model.eval()
 break_loop = False
 
-input_image_caption = input("Enter Caption: ").lower()
-demo_object.update(caption=input_image_caption)
+# input_image_caption = input("Enter Caption: ").lower()
+# demo_object.update(caption=input_image_caption)
+demo_object.set_image(args.imagepath)
 while not break_loop:
     user_question = input("Type Question: ").lower()
     batch = demo_object.get_data(user_question)
 
+    # move the forward pass into the demo-object as well ??
+    # seems correct I think, just return the answer
     for key in batch:
         batch[key] = batch[key].to(device)
 

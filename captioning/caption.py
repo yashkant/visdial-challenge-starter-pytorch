@@ -76,7 +76,7 @@ class PythiaCaptioning:
             new_sd[k1] = v
         return new_sd
 
-    def predict(self, url):
+    def predict(self, url, get_features=False):
         with torch.no_grad():
             detectron_features = get_detectron_features(
                 url,
@@ -98,7 +98,10 @@ class PythiaCaptioning:
         gc.collect()
         torch.cuda.empty_cache()
 
-        return tokens
+        if not get_features:
+            return tokens
+        else:
+            return tokens, detectron_features
 
     def _build_detection_model(self):
 
