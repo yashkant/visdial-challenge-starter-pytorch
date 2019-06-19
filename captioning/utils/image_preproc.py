@@ -54,12 +54,17 @@ def process_feature_extraction(output,
     cur_device = score_list[0].device
 
     feat_list = []
+    boxes_list = []
+    classes_list = []
+    conf_list = []
 
     for i in range(batch_size):
         dets = output[0]["proposals"][i].bbox / im_scales[i]
         scores = score_list[i]
 
         max_conf = torch.zeros((scores.shape[0])).to(cur_device)
+        max_cls = torch.zeros((scores.shape[0])).to(cur_device)
+        max_box = torch.zeros((scores.shape[0], 4)).to(cur_device)
 
         for cls_ind in range(1, scores.shape[1]):
             cls_scores = scores[:, cls_ind]
@@ -68,9 +73,23 @@ def process_feature_extraction(output,
                                          cls_scores[keep],
                                          max_conf[keep])
 
+            max_cls[keep] = torch.where(cls_scores[keep] > max_conf[keep],
+                                        cls_ind,
+                                        max_cls[keep])
+            # check the dets and the condition below
+            max_box[keep] = torch.where(cls_scores[keep] > max_conf[keep],
+                                        dets[keep],
+                                        max_box[keep])
+
+        # add max-boxes config and use below
         keep_boxes = torch.argsort(max_conf, descending=True)[:100]
+        # verify if this works as intended
+        boxes_list.append(max_box[i][keep_boxes])
+        classes_list.append(max_cls[i][keep_boxes])
+        conf_list.append(max_conf[i][keep_boxes])
         feat_list.append(feats[i][keep_boxes])
-    return feat_list
+
+    return boxes_list, feat_list, classes_list, conf_list
 
 
 def get_detectron_features(image_path, detection_model):
