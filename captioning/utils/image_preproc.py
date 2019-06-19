@@ -46,6 +46,8 @@ def process_feature_extraction(output,
                                im_scales,
                                feat_name='fc6',
                                conf_thresh=0.2):
+    import pdb
+    pdb.set_trace(  )
     batch_size = len(output[0]["proposals"])
     n_boxes_per_image = [len(_) for _ in output[0]["proposals"]]
     score_list = output[0]["scores"].split(n_boxes_per_image)
@@ -63,30 +65,28 @@ def process_feature_extraction(output,
         scores = score_list[i]
 
         max_conf = torch.zeros((scores.shape[0])).to(cur_device)
-        max_cls = torch.zeros((scores.shape[0])).to(cur_device)
+        max_cls = torch.zeros((scores.shape[0]), dtype=torch.long).to(cur_device)
         max_box = torch.zeros((scores.shape[0], 4)).to(cur_device)
 
         for cls_ind in range(1, scores.shape[1]):
             cls_scores = scores[:, cls_ind]
             keep = nms(dets, cls_scores, 0.5)
+
+            max_cls[keep] = torch.where(cls_scores[keep] > max_conf[keep], torch.tensor(cls_ind).to(cur_device), max_cls[keep])
+
+            max_box[keep] = torch.where((cls_scores[keep] > max_conf[keep]).view(-1, 1), dets[keep], max_box[keep])
+
             max_conf[keep] = torch.where(cls_scores[keep] > max_conf[keep],
                                          cls_scores[keep],
                                          max_conf[keep])
 
-            max_cls[keep] = torch.where(cls_scores[keep] > max_conf[keep],
-                                        cls_ind,
-                                        max_cls[keep])
-            # check the dets and the condition below
-            max_box[keep] = torch.where(cls_scores[keep] > max_conf[keep],
-                                        dets[keep],
-                                        max_box[keep])
-
+        pdb.set_trace(  )
         # add max-boxes config and use below
         keep_boxes = torch.argsort(max_conf, descending=True)[:100]
         # verify if this works as intended
-        boxes_list.append(max_box[i][keep_boxes])
-        classes_list.append(max_cls[i][keep_boxes])
-        conf_list.append(max_conf[i][keep_boxes])
+        boxes_list.append(max_box[keep_boxes])
+        classes_list.append(max_cls[keep_boxes])
+        conf_list.append(max_conf[keep_boxes])
         feat_list.append(feats[i][keep_boxes])
 
     return boxes_list, feat_list, classes_list, conf_list
