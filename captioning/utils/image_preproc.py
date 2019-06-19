@@ -7,6 +7,8 @@ from maskrcnn_benchmark.layers import nms
 from maskrcnn_benchmark.structures.image_list import to_image_list
 
 
+# TODO: Comments, Docstrings, Cleanup.
+
 def get_actual_image(image_path):
     if image_path.startswith('http'):
         path = requests.get(image_path, stream=True).raw
@@ -44,10 +46,12 @@ def image_transform(image_path):
 
 def process_feature_extraction(output,
                                im_scales,
+                               get_boxes=False,
                                feat_name='fc6',
                                conf_thresh=0.2):
+    # TODO: Add docstring and explain get_boxes
     import pdb
-    pdb.set_trace(  )
+    pdb.set_trace()
     batch_size = len(output[0]["proposals"])
     n_boxes_per_image = [len(_) for _ in output[0]["proposals"]]
     score_list = output[0]["scores"].split(n_boxes_per_image)
@@ -65,39 +69,69 @@ def process_feature_extraction(output,
         scores = score_list[i]
 
         max_conf = torch.zeros((scores.shape[0])).to(cur_device)
-        max_cls = torch.zeros((scores.shape[0]), dtype=torch.long).to(cur_device)
-        max_box = torch.zeros((scores.shape[0], 4)).to(cur_device)
+
+        if get_boxes:
+            max_cls = torch.zeros((scores.shape[0]), dtype=torch.long).to(
+                cur_device)
+            max_box = torch.zeros((scores.shape[0], 4)).to(cur_device)
 
         for cls_ind in range(1, scores.shape[1]):
             cls_scores = scores[:, cls_ind]
             keep = nms(dets, cls_scores, 0.5)
 
-            max_cls[keep] = torch.where(cls_scores[keep] > max_conf[keep], torch.tensor(cls_ind).to(cur_device), max_cls[keep])
+            if get_boxes:
+                max_cls[keep] = torch.where(
+                    cls_scores[keep] > max_conf[keep],
+                    torch.tensor(cls_ind).to(cur_device),
+                    max_cls[keep]
+                )
 
-            max_box[keep] = torch.where((cls_scores[keep] > max_conf[keep]).view(-1, 1), dets[keep], max_box[keep])
+                max_box[keep] = torch.where(
+                    (cls_scores[keep] > max_conf[keep]).view(-1, 1),
+                    dets[keep],
+                    max_box[keep]
+                )
 
-            max_conf[keep] = torch.where(cls_scores[keep] > max_conf[keep],
-                                         cls_scores[keep],
-                                         max_conf[keep])
+            max_conf[keep] = torch.where(
+                cls_scores[keep] > max_conf[keep],
+                cls_scores[keep],
+                max_conf[keep]
+            )
 
-        pdb.set_trace(  )
-        # add max-boxes config and use below
+        # TODO: add max-boxes config instead of 100 and use below
         keep_boxes = torch.argsort(max_conf, descending=True)[:100]
-        # verify if this works as intended
+        feat_list.append(feats[i][keep_boxes])
+
+        if not get_boxes:
+            return feat_list
+
+        conf_list.append(max_conf[keep_boxes])
         boxes_list.append(max_box[keep_boxes])
         classes_list.append(max_cls[keep_boxes])
-        conf_list.append(max_conf[keep_boxes])
-        feat_list.append(feats[i][keep_boxes])
 
     return boxes_list, feat_list, classes_list, conf_list
 
 
-def get_detectron_features(image_path, detection_model):
+# Given a single image returns features, bboxes, scores and classes
+def get_detectron_features(image_path, detection_model, get_boxes):
     im, im_scale = image_transform(image_path)
     img_tensor, im_scales = [im], [im_scale]
     current_img_list = to_image_list(img_tensor, size_divisible=32)
     current_img_list = current_img_list.to('cuda')
     with torch.no_grad():
         output = detection_model(current_img_list)
-    feat_list = process_feature_extraction(output, im_scales, 'fc6', 0.2)
-    return feat_list[0]
+    return_list = process_feature_extraction(
+        output,
+        im_scales,
+        get_boxes=get_boxes,
+        feat_name='fc6',
+        conf_thresh=0.2
+    )
+
+    if not get_boxes:
+        # return_list: list of features
+        return return_list[0]
+    else:
+        # return_list: [list of boxes, list of features, list of
+        # classes, list of scores]
+        return [item[0] for item in return_list]

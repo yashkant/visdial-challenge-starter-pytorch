@@ -78,7 +78,11 @@ class PythiaCaptioning:
 
     def predict(self, url):
         with torch.no_grad():
-            detectron_features = get_detectron_features(url, self.detection_model)
+            detectron_features = get_detectron_features(
+                url,
+                self.detection_model,
+                False
+            )
 
             sample = Sample()
             sample.dataset_name = "coco"
