@@ -17,7 +17,7 @@ def get_actual_image(image_path):
 
 
 def image_transform(image_path):
-    path = self.get_actual_image(image_path)
+    path = get_actual_image(image_path)
 
     img = Image.open(path)
     im = np.array(img).astype(np.float32)

@@ -1,1 +1,1 @@
-from caption import PythiaCaptioning
+from .caption import PythiaCaptioning

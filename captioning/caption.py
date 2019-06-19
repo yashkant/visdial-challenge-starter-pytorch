@@ -10,7 +10,7 @@ from pythia.common.sample import Sample, SampleList
 from pythia.models.butd import BUTD
 from pythia.tasks.processors import VocabProcessor, CaptionProcessor
 from pythia.utils.configuration import ConfigNode
-from utils import get_detectron_features
+from .utils import get_detectron_features
 
 
 class PythiaCaptioning:

@@ -1,1 +1,1 @@
-from image_preproc import *
+from .image_preproc import *
