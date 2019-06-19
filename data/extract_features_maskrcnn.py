@@ -5,15 +5,18 @@ import torch
 import cv2  # must import before importing caffe2 due to bug in cv2
 from tqdm import tqdm
 import h5py
-
-from captioning.maskrcnn_benchmark.config import cfg
-from captioning.maskrcnn_benchmark.modeling.detector import (
+import yaml
+import sys
+sys.path.append("..") # add parent to import modules
+import os
+# path to packages inside captioning are already available to interpreter
+from maskrcnn_benchmark.config import cfg
+from maskrcnn_benchmark.modeling.detector import (
     build_detection_model
 )
-from captioning.maskrcnn_benchmark.utils.model_serialization import (
+from maskrcnn_benchmark.utils.model_serialization import (
     load_state_dict
 )
-
 from captioning.utils import get_detectron_features
 
 
@@ -35,17 +38,13 @@ parser.add_argument(
 parser.add_argument(
     "--config",
     help="Path to model config file used by Detectron (.yaml)",
-    default="data/config_faster_rcnn_x101.yaml",
+    default="configs/lf_gen_faster_rcnn_x101_demo.yml",
 )
-parser.add_argument(
-    "--weights",
-    help="Path to model weights file saved by Detectron (.pkl)",
-    default="data/model_faster_rcnn_x101.pkl",
-)
+
 parser.add_argument(
     "--save-path",
     help="Path to output file for saving bottom-up features (.h5)",
-    default="data/data_img_faster_rcnn_x101.h5",
+    default="data_img_mask_rcnn_x101.h5",
 )
 parser.add_argument(
     "--max-boxes",
@@ -56,7 +55,7 @@ parser.add_argument(
 parser.add_argument(
     "--feat-name",
     help="The name of the layer to extract features from.",
-    default="fc7",
+    default="fc6",
 )
 parser.add_argument(
     "--feat-dims",
@@ -104,17 +103,19 @@ def main(args):
         Parsed command-line arguments.
     """
     # load config
-    config = yaml.load(open(args.config))
+    visdial_path = os.getcwd() + "/../"
+    config = yaml.load(open(visdial_path + args.config))
     caption_config = config["captioning"]
+
     cfg.merge_from_file(
-        caption_config["detectron_model"]["config_yaml"]
+        visdial_path + caption_config["detectron_model"]["config_yaml"]
     )
     cfg.freeze()
 
     # build mask-rcnn detection model
     detection_model = build_detection_model(cfg)
     checkpoint = torch.load(
-        caption_config["detectron_model"]["model_pth"],
+        visdial_path + caption_config["detectron_model"]["model_pth"],
         map_location=torch.device("cpu"))
 
     load_state_dict(detection_model, checkpoint.pop("model"))
@@ -154,8 +155,6 @@ def main(args):
     for idx, image_path in enumerate(tqdm(image_paths)):
         try:
             image_ids_h5d[idx] = image_id_from_path(image_path)
-            import pdb
-            pdb.set_trace()
             boxes, features, classes, scores = get_detectron_features(
                 image_path,
                 detection_model,
