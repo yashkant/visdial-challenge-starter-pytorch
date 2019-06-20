@@ -50,8 +50,6 @@ def process_feature_extraction(output,
                                feat_name='fc6',
                                conf_thresh=0.2):
     # TODO: Add docstring and explain get_boxes
-    import pdb
-    pdb.set_trace()
     batch_size = len(output[0]["proposals"])
     n_boxes_per_image = [len(_) for _ in output[0]["proposals"]]
     score_list = output[0]["scores"].split(n_boxes_per_image)

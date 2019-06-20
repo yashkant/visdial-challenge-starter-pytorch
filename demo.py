@@ -1,9 +1,9 @@
 import argparse
-
 import torch
 import yaml
 from mosestokenizer import MosesDetokenizer
 from torch import nn
+import os
 
 from visdialch.data.demo_object import DemoObject
 from visdialch.decoders import Decoder
@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument(
     "--config-yml",
-    default="configs/lf_disc_faster_rcnn_x101_demo.yml",
+    default="configs/lf_gen_faster_rcnn_x101_demo.yml",
     help="Path to a config file listing reader, model and optimization "
          "parameters.",
 )
@@ -24,7 +24,7 @@ parser.add_argument(
 parser.add_argument_group("Demo related arguments")
 parser.add_argument(
     "--load-pthpath",
-    default="checkpoints/checkpoint_xx.pth",
+    default="checkpoints/lf_gen_faster_rcnn_x101_train.pth",
     help="Path to .pth file of pretrained checkpoint.",
 )
 
@@ -41,7 +41,7 @@ parser.add_argument(
     "--gpu-ids",
     nargs="+",
     type=int,
-    default=-1,
+    default=0,
     help="List of ids of GPUs to use.",
 )
 parser.add_argument(
@@ -74,6 +74,9 @@ torch.backends.cudnn.deterministic = True
 # =============================================================================
 
 args = parser.parse_args()
+# get abs path
+if not os.path.isabs(args.config_yml):
+    args.config_yml = os.path.abspath(args.config_yml) 
 
 # keys: {"dataset", "model", "solver"}
 config = yaml.load(open(args.config_yml))

@@ -27,7 +27,8 @@ class DemoObject:
         self.add_boundary_toks = add_boundary_toks
 
         self.vocabulary = Vocabulary(
-            config["word_counts_json"], min_count=config["vocab_min_count"]
+            self.dataset_config["word_counts_json"],
+            min_count=self.dataset_config["vocab_min_count"]
         )
 
         # build captioning and feature extraction model
@@ -50,7 +51,6 @@ class DemoObject:
         self.answers, self.answer_lengths = [], []
         self.history, self.history_lengths = [], []
         self.num_rounds = 0
-        self.update()
 
     # Call this method to retrive an object for inference, pass the
     # natural language question asked by the user.
@@ -124,15 +124,15 @@ class DemoObject:
             image_path,
             True
         )
+
         if self.dataset_config["img_norm"]:
             image_features = normalize(image_features, dim=0, p=2)
 
-        # MosesDetokenizer used to detokenize, it is separated from nltk.
-        # Refer: https://pypi.org/project/mosestokenizer/
-        with MosesDetokenizer('en') as detokenize:
-            self.image_caption_nl = detokenize(caption_tokens)
-        self.image_features = image_features
-        self.image_caption = self.vocabulary.to_indices(caption_tokens)
+        self.image_caption_nl = self.caption_model.caption_processor(caption_tokens.tolist()[0])["caption"]
+        self.image_caption = self.vocabulary.to_indices(word_tokenize(self.image_caption_nl))
+        self.image_features = image_features.unsqueeze(0)
+        # build the initial history
+        self.update()
 
     # Returns natural language caption
     def get_caption(self):
