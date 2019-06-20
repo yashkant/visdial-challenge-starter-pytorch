@@ -8,16 +8,15 @@ from torch import nn
 from visdialch.data.demo_object import DemoObject
 from visdialch.decoders import Decoder
 from visdialch.encoders import Encoder
-from visdialch.metrics import SparseGTMetrics, NDCG
 from visdialch.model import EncoderDecoderModel
 from visdialch.utils.checkpointing import load_checkpoint
 
 parser = argparse.ArgumentParser(
-    "Evaluate and/or generate EvalAI submission file."
+    "Run Visual-Dialog Demo"
 )
 parser.add_argument(
     "--config-yml",
-    default="configs/lf_disc_faster_rcnn_x101.yml",
+    default="configs/lf_disc_faster_rcnn_x101_demo.yml",
     help="Path to a config file listing reader, model and optimization "
          "parameters.",
 )
@@ -126,9 +125,9 @@ print("Loaded model from {}".format(args.load_pthpath))
 model.eval()
 break_loop = False
 
-# input_image_caption = input("Enter Caption: ").lower()
-# demo_object.update(caption=input_image_caption)
+# extract features and build caption for the image
 demo_object.set_image(args.imagepath)
+
 while not break_loop:
     user_question = input("Type Question: ").lower()
     batch = demo_object.get_data(user_question)

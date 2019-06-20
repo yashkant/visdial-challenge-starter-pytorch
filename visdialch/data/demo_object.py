@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 import torch
 from nltk.tokenize import word_tokenize
 from torch.nn.functional import normalize
-
+import os
 from visdialch.data import VisDialDataset
 from visdialch.data.readers import (
     ImageFeaturesHdfReader,
@@ -36,17 +36,6 @@ class DemoObject:
             None, None, None
         )
 
-        # # Extract the image-features from the image-path here
-        # image_features_hdfpath = config["image_features_train_h5"]
-        # self.hdf_reader = ImageFeaturesHdfReader(
-        #     image_features_hdfpath, in_memory
-        # )
-        #
-        # # Store image features of the selected image in our object
-        # image_id = self.hdf_reader.keys()[-14]
-        # print(f"Image id: {int(image_id)}")
-        # image_features = torch.tensor(self.hdf_reader[image_id])
-
         # TODO: Think about this norm thingy below! Do I need to use this on
         # our current features! I think yes, because it will be used
         # when we train the visdial-model on new features.
@@ -56,14 +45,6 @@ class DemoObject:
         #
 
         # self.image_features = image_features.unsqueeze(0)
-        #
-        # # Make the call for the generating caption here.
-        # image_caption = "a group with drinks posing for a picture"
-        #
-        # # Store the caption in natural language
-        # self.image_caption_nl = image_caption
-        # image_caption = word_tokenize(image_caption)
-        # self.image_caption = self.vocabulary.to_indices(image_caption)
 
         self.questions, self.question_lengths = [], []
         self.answers, self.answer_lengths = [], []
@@ -134,10 +115,15 @@ class DemoObject:
         # think about this
         pass
 
+    # Extracts features and build caption for the image
     def set_image(self, image_path):
-        # look for abs/relative image-path thing here
-        caption_tokens, image_features = self.caption_model(image_path)
-
+        if not os.path.isabs(image_path):
+            image_path = os.path.abspath(image_path)
+        print("Path:", image_path)
+        caption_tokens, image_features = self.caption_model.predict(
+            image_path,
+            True
+        )
         if self.dataset_config["img_norm"]:
             image_features = normalize(image_features, dim=0, p=2)
 
@@ -145,7 +131,6 @@ class DemoObject:
         # Refer: https://pypi.org/project/mosestokenizer/
         with MosesDetokenizer('en') as detokenize:
             self.image_caption_nl = detokenize(caption_tokens)
-
         self.image_features = image_features
         self.image_caption = self.vocabulary.to_indices(caption_tokens)
 
