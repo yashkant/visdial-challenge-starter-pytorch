@@ -5,7 +5,7 @@ import requests
 from PIL import Image
 from maskrcnn_benchmark.layers import nms
 from maskrcnn_benchmark.structures.image_list import to_image_list
-
+from tqdm import tqdm
 
 # TODO: Comments, Docstrings, Cleanup.
 
@@ -20,7 +20,6 @@ def get_actual_image(image_path):
 
 def image_transform(image_path):
     path = get_actual_image(image_path)
-
     img = Image.open(path)
     im = np.array(img).astype(np.float32)
     im = im[:, :, ::-1]
@@ -111,20 +110,39 @@ def process_feature_extraction(output,
 
 
 # Given a single image returns features, bboxes, scores and classes
-def get_detectron_features(image_path, detection_model, get_boxes):
-    im, im_scale = image_transform(image_path)
-    img_tensor, im_scales = [im], [im_scale]
+def get_detectron_features(image_path, detection_model, get_boxes, feat_name, batch_mode=False):
+    # get list [image_path]
+    # get a for loop for image_transform and bulid img_tensor and im_scales
+    # process_feature_extraction can handle varying batch_size
+    # finally also remove the boxes, as we don't use them in features
+    img_tensor, im_scales = [], []
+
+    if batch_mode:
+        # TODO: Use better arg-name and loop vars
+        for img_path in tqdm(image_path, desc="Image Transform"):
+            im, im_scale = image_transform(img_path)
+            img_tensor.append(im)
+            im_scales.append(im_scale)
+    else:
+        im, im_scale = image_transform(image_path)
+        img_tensor, im_scales = [im], [im_scale]
+
     current_img_list = to_image_list(img_tensor, size_divisible=32)
     current_img_list = current_img_list.to('cuda')
     with torch.no_grad():
         output = detection_model(current_img_list)
+
     return_list = process_feature_extraction(
         output,
         im_scales,
         get_boxes=get_boxes,
-        feat_name='fc6',
+        feat_name=feat_name,
         conf_thresh=0.2
     )
+
+    # TODO: looks dirty?
+    if batch_mode:
+        return return_list
 
     if not get_boxes:
         # return_list: list of features

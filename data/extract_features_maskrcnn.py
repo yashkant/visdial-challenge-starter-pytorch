@@ -74,6 +74,12 @@ parser.add_argument(
     type=int,
     default=0,
 )
+parser.add_argument(
+    "--batch-size",
+    help="Batch size for no. of images to be processed in one iteration",
+    type=int,
+    default=128,
+)
 
 
 def image_id_from_path(image_path):
@@ -152,23 +158,45 @@ def main(args):
         "scores", (len(image_paths), args.max_boxes, ),
     )
 
-    for idx, image_path in enumerate(tqdm(image_paths)):
-        try:
-            image_ids_h5d[idx] = image_id_from_path(image_path)
-            boxes, features, classes, scores = get_detectron_features(
-                image_path,
-                detection_model,
-                True
-            )
-            boxes_h5d[idx] = boxes
-            features_h5d[idx] = features
-            classes_h5d[idx] = classes
-            scores_h5d[idx] = scores
+    batch_size = args.batch_size
+    mini_batches = len(image_paths)//batch_size
 
-        except Exception as e:
-            print(f"Warning: Failed to extract features from {idx}, "
-                  f"{image_path}")
-            print(f"Exception Occurred: {e}\n\n")
+    for iter in range(mini_batches+1):
+        idx_start, idx_end = iter*batch_size, (iter+1)*batch_size
+        batch_image_paths = image_paths[idx_start:idx_end]
+        boxes, features, classes, scores = get_detectron_features(
+            batch_image_paths,
+            detection_model,
+            True,
+            feat_name=args.feat_name,
+            batch_mode=True
+        )
+        import pdb
+        pdb.set_trace()
+        boxes_h5d[idx_start:idx_end] = boxes
+        features_h5d[idx_start:idx_end] = features
+        classes_h5d[idx_start:idx_end] = classes
+        scores_h5d[idx_start:idx_end] = scores
+
+    # for idx, image_path in enumerate(tqdm(image_paths)):
+    #     try:
+    #         image_ids_h5d[idx] = image_id_from_path(image_path)
+    #         boxes, features, classes, scores = get_detectron_features(
+    #             image_path,
+    #             detection_model,
+    #             True,
+    #             feat_name=args.feat_name,
+    #             batch_mode=True
+    #         )
+    #         boxes_h5d[idx] = boxes
+    #         features_h5d[idx] = features
+    #         classes_h5d[idx] = classes
+    #         scores_h5d[idx] = scores
+    #
+    #     except Exception as e:
+    #         print(f"Warning: Failed to extract features from {idx}, "
+    #               f"{image_path}")
+    #         print(f"Exception Occurred: {e}\n\n")
 
     # set current split name in attributrs of file, for tractability
     save_h5.attrs["split"] = args.split
