@@ -119,7 +119,7 @@ def get_detectron_features(image_path, detection_model, get_boxes, feat_name, ba
 
     if batch_mode:
         # TODO: Use better arg-name and loop vars
-        for img_path in tqdm(image_path, desc="Image Transform"):
+        for img_path in image_path:
             im, im_scale = image_transform(img_path)
             img_tensor.append(im)
             im_scales.append(im_scale)

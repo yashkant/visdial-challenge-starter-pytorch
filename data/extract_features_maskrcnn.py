@@ -7,6 +7,8 @@ from tqdm import tqdm
 import h5py
 import yaml
 import sys
+import numpy as np
+
 sys.path.append("..") # add parent to import modules
 import os
 # path to packages inside captioning are already available to interpreter
@@ -55,7 +57,7 @@ parser.add_argument(
 parser.add_argument(
     "--feat-name",
     help="The name of the layer to extract features from.",
-    default="fc6",
+    default="fc7",
 )
 parser.add_argument(
     "--feat-dims",
@@ -78,7 +80,7 @@ parser.add_argument(
     "--batch-size",
     help="Batch size for no. of images to be processed in one iteration",
     type=int,
-    default=128,
+    default=8,
 )
 
 
@@ -117,7 +119,7 @@ def main(args):
         visdial_path + caption_config["detectron_model"]["config_yaml"]
     )
     cfg.freeze()
-
+    # TODO: pretty print config
     # build mask-rcnn detection model
     detection_model = build_detection_model(cfg)
     checkpoint = torch.load(
@@ -161,7 +163,7 @@ def main(args):
     batch_size = args.batch_size
     mini_batches = len(image_paths)//batch_size
 
-    for iter in range(mini_batches+1):
+    for iter in tqdm(range(mini_batches+1), desc="Processing Batches"):
         idx_start, idx_end = iter*batch_size, (iter+1)*batch_size
         batch_image_paths = image_paths[idx_start:idx_end]
         boxes, features, classes, scores = get_detectron_features(
@@ -171,12 +173,10 @@ def main(args):
             feat_name=args.feat_name,
             batch_mode=True
         )
-        import pdb
-        pdb.set_trace()
-        boxes_h5d[idx_start:idx_end] = boxes
-        features_h5d[idx_start:idx_end] = features
-        classes_h5d[idx_start:idx_end] = classes
-        scores_h5d[idx_start:idx_end] = scores
+        boxes_h5d[idx_start:idx_end] = np.array([item.cpu().numpy() for item in boxes])
+        features_h5d[idx_start:idx_end] = np.array([item.cpu().numpy() for item in features])
+        classes_h5d[idx_start:idx_end] = np.array([item.cpu().numpy() for item in classes])
+        scores_h5d[idx_start:idx_end] = np.array([item.cpu().numpy() for item in classes])
 
     # for idx, image_path in enumerate(tqdm(image_paths)):
     #     try:
