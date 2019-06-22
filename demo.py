@@ -1,17 +1,13 @@
 import argparse
+import os
+
 import torch
 import yaml
-from mosestokenizer import MosesDetokenizer
-from torch import nn
-import os
 
 from captioning import PythiaCaptioning
 from visdialch.data import Vocabulary
 from visdialch.data.demo_object import DemoObject
-from visdialch.decoders import Decoder
-from visdialch.encoders import Encoder
 from visdialch.model import EncoderDecoderModel
-from visdialch.utils.checkpointing import load_checkpoint
 
 parser = argparse.ArgumentParser(
     "Run Visual-Dialog Demo"
@@ -109,7 +105,6 @@ vocabulary = Vocabulary(
 )
 
 # Build Encoder-Decoder model and load its checkpoint
-# TODO: Build two constructors and for backward compatibility
 enc_dec_model = EncoderDecoderModel(model_config, vocabulary).to(device)
 enc_dec_model.load_checkpoint(args.load_pthpath)
 
@@ -132,7 +127,7 @@ demo_object = DemoObject(
 
 enc_dec_model.eval()
 
-# extract features and build caption for the image
+# Extract features and build caption for the image
 demo_object.set_image(args.imagepath)
 print(f"Caption: {demo_object.get_caption()}")
 while True:

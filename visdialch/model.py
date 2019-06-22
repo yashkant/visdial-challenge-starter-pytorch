@@ -4,7 +4,7 @@ from visdialch.decoders import Decoder
 from visdialch.encoders import Encoder
 from visdialch.utils.checkpointing import load_checkpoint
 
-
+# TODO: Modify docstring and hints
 class EncoderDecoderModel(nn.Module):
     """Convenience wrapper module, wrapping Encoder and Decoder modules.
 

@@ -5,7 +5,6 @@ import requests
 from PIL import Image
 from maskrcnn_benchmark.layers import nms
 from maskrcnn_benchmark.structures.image_list import to_image_list
-from tqdm import tqdm
 
 # TODO: Comments, Docstrings, Cleanup.
 
@@ -109,12 +108,12 @@ def process_feature_extraction(output,
     return boxes_list, feat_list, classes_list, conf_list
 
 
-# Given a single image returns features, bboxes, scores and classes
-def get_detectron_features(image_path, detection_model, get_boxes, feat_name, batch_mode=False):
-    # get list [image_path]
-    # get a for loop for image_transform and bulid img_tensor and im_scales
-    # process_feature_extraction can handle varying batch_size
-    # finally also remove the boxes, as we don't use them in features
+# Given a single/list of image(s) returns features, bboxes, scores and classes
+def get_detectron_features(image_path,
+                           detection_model,
+                           get_boxes,
+                           feat_name,
+                           batch_mode=False):
     img_tensor, im_scales = [], []
 
     if batch_mode:
@@ -143,11 +142,8 @@ def get_detectron_features(image_path, detection_model, get_boxes, feat_name, ba
     # TODO: looks dirty?
     if batch_mode:
         return return_list
-
-    if not get_boxes:
-        # return_list: list of features
-        return return_list[0]
-    else:
-        # return_list: [list of boxes, list of features, list of
-        # classes, list of scores]
+    if get_boxes:
         return [item[0] for item in return_list]
+    else:
+        return return_list[0]
+

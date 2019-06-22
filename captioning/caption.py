@@ -12,7 +12,7 @@ from pythia.tasks.processors import VocabProcessor, CaptionProcessor
 from pythia.utils.configuration import ConfigNode
 from .utils import get_detectron_features
 
-
+# TODO: Docstrings and hints
 class PythiaCaptioning:
     TARGET_IMAGE_SIZE = [448, 448]
     CHANNEL_MEAN = [0.485, 0.456, 0.406]
@@ -36,9 +36,11 @@ class PythiaCaptioning:
 
         self.config = config
 
-        captioning_config = config.task_attributes.captioning.dataset_attributes.coco
+        captioning_config = config.task_attributes.captioning\
+            .dataset_attributes.coco
         text_processor_config = captioning_config.processors.text_processor
-        caption_processor_config = captioning_config.processors.caption_processor
+        caption_processor_config = captioning_config.processors\
+            .caption_processor
         vocab_file_path = self.caption_config[
             "text_caption_processor_vocab_txt"]
         text_processor_config.params.vocab.vocab_file = vocab_file_path

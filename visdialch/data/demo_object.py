@@ -8,6 +8,8 @@ from torch.nn.functional import normalize
 from visdialch.data import VisDialDataset
 from urllib.parse import urlparse
 
+
+# TODO: Add docstrings, hints
 def validate_url(url):
     try:
         result = urlparse(url)
@@ -45,8 +47,8 @@ class DemoObject:
         self.history, self.history_lengths = [], []
         self.num_rounds = 0
 
-    # Call this method to retrive an object for inference, pass the
-    # natural language question asked by the user.
+    # Call this method to retrive a dict object for inference. Pass the
+    # natural language question asked by the user as arg.
     def _get_data(self, question: Optional[str] = None):
         data = {}
         data["img_feat"] = self.image_features
@@ -55,10 +57,8 @@ class DemoObject:
         data["hist"] = self.history[-1].view(1, 1, -1).long()
         data["hist_len"] = torch.tensor([self.history_lengths[-1]]).long()
 
+        # process the question and fill the inference dict object
         if question is not None:
-            # Create field for current question, I think we need to place
-            # questions one by one in data["ques"] field and move the
-            # older ones to history (done by update).
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)
             pad_question, question_length = VisDialDataset._pad_sequences(
@@ -74,7 +74,7 @@ class DemoObject:
 
         return data
 
-    # Call this method as we have new dialogs in conversation.
+    # Call this method as we have new dialogs (ques/ans pairs) in conversation.
     def update(
             self,
             question: Optional[str] = None,
@@ -103,7 +103,7 @@ class DemoObject:
         )
         self.num_rounds += 1
 
-    # Call this method to reset data inside set_image
+    # Call this method to reset data, this is used internally by set_image()
     def _reset(self):
         self.image_features, self.image_caption_nl, self.image_caption = (
             None, None, None
@@ -113,7 +113,7 @@ class DemoObject:
         self.history, self.history_lengths = [], []
         self.num_rounds = 0
 
-    # Extracts features and build caption for the image
+    # Download, extract features and build caption for the image
     def set_image(self, image_path):
         self._reset()
         if not os.path.isabs(image_path) and not validate_url(image_path):
