@@ -20,10 +20,10 @@ class PythiaCaptioning:
 
     def __init__(self, caption_config, cuda_device):
         self.caption_config = caption_config
+        self.cuda_device = cuda_device
         self._init_processors()
         self.pythia_model = self._build_pythia_model()
         self.detection_model = self._build_detection_model()
-        self.cuda_device = cuda_device
 
     def _init_processors(self):
         with open(self.caption_config["butd_model"]["config_yaml"]) as f:
@@ -77,12 +77,13 @@ class PythiaCaptioning:
             new_sd[k1] = v
         return new_sd
 
-    def predict(self, url, get_features=False):
+    def predict(self, url, feat_name, get_features=False):
         with torch.no_grad():
             detectron_features = get_detectron_features(
                 url,
                 self.detection_model,
-                False
+                False,
+                feat_name = feat_name
             )
 
             sample = Sample()
@@ -92,7 +93,7 @@ class PythiaCaptioning:
             sample.answers = torch.zeros((5, 10), dtype=torch.long)
 
             sample_list = SampleList([sample])
-            sample_list = sample_list.to(self.cuda_device)
+            sample_list = sample_list.to("cuda")
 
             tokens = self.pythia_model(sample_list)["captions"]
 

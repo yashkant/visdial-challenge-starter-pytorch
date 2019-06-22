@@ -122,7 +122,8 @@ demo_object = DemoObject(
     caption_model,
     enc_dec_model,
     vocabulary,
-    dataset_config
+    config,
+    device
 )
 
 # =============================================================================

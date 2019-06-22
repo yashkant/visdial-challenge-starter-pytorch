@@ -34,3 +34,4 @@ captioning:
   detectron_model:
     config_yaml: 'captioning/model_data/detectron_model.yaml'
     model_pth: 'captioning/model_data/detectron_model.pth'
+    feat_name: 'fc6'

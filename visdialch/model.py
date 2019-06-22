@@ -47,5 +47,5 @@ class EncoderDecoderModel(nn.Module):
             self.module.load_state_dict(model_state_dict)
         else:
             self.load_state_dict(model_state_dict)
-        print("Loaded model from {}".format(args.load_pthpath))
+        print("Loaded model from {}".format(load_pthpath))
 

@@ -6,6 +6,14 @@ from mosestokenizer import MosesDetokenizer
 from nltk.tokenize import word_tokenize
 from torch.nn.functional import normalize
 from visdialch.data import VisDialDataset
+from urllib.parse import urlparse
+
+def validate_url(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc, result.path])
+    except:
+        return False
 
 
 class DemoObject:
@@ -15,7 +23,7 @@ class DemoObject:
             caption_model,
             enc_dec_model,
             vocabulary,
-            dataset_config: Dict[str, Any],
+            config: Dict[str, Any],
             cuda_device,
             add_boundary_toks: bool = True,
     ):
@@ -23,7 +31,8 @@ class DemoObject:
         self.caption_model = caption_model
         self.enc_dec_model = enc_dec_model
         self.vocabulary = vocabulary
-        self.dataset_config = dataset_config
+        self.dataset_config = config["dataset"]
+        self.caption_config = config["captioning"]
         self.cuda_device = cuda_device
         self.add_boundary_toks = add_boundary_toks
 
@@ -107,12 +116,13 @@ class DemoObject:
     # Extracts features and build caption for the image
     def set_image(self, image_path):
         self._reset()
-        if not os.path.isabs(image_path):
+        if not os.path.isabs(image_path) and not validate_url(image_path):
             image_path = os.path.abspath(image_path)
         print(f"Loading image from : {image_path}")
         caption_tokens, image_features = self.caption_model.predict(
             image_path,
-            True
+            self.caption_config["detectron_model"]["feat_name"],
+            True,
         )
 
         if self.dataset_config["img_norm"]:
