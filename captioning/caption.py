@@ -18,11 +18,12 @@ class PythiaCaptioning:
     CHANNEL_MEAN = [0.485, 0.456, 0.406]
     CHANNEL_STD = [0.229, 0.224, 0.225]
 
-    def __init__(self, caption_config):
+    def __init__(self, caption_config, cuda_device):
         self.caption_config = caption_config
         self._init_processors()
         self.pythia_model = self._build_pythia_model()
         self.detection_model = self._build_detection_model()
+        self.cuda_device = cuda_device
 
     def _init_processors(self):
         with open(self.caption_config["butd_model"]["config_yaml"]) as f:
@@ -62,7 +63,7 @@ class PythiaCaptioning:
             state_dict = self._multi_gpu_state_to_single(state_dict)
 
         model.load_state_dict(state_dict)
-        model.to("cuda")
+        model.to(self.cuda_device)
         model.eval()
 
         return model
@@ -91,7 +92,7 @@ class PythiaCaptioning:
             sample.answers = torch.zeros((5, 10), dtype=torch.long)
 
             sample_list = SampleList([sample])
-            sample_list = sample_list.to("cuda")
+            sample_list = sample_list.to(self.cuda_device)
 
             tokens = self.pythia_model(sample_list)["captions"]
 
@@ -116,7 +117,7 @@ class PythiaCaptioning:
 
         load_state_dict(model, checkpoint.pop("model"))
 
-        model.to("cuda")
+        model.to(self.cuda_device)
         model.eval()
         return model
 
