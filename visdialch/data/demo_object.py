@@ -1,80 +1,68 @@
-from typing import Any, Dict, Optional
-
+import os
 import torch
+
+from typing import Any, Dict, Optional
+from mosestokenizer import MosesDetokenizer
 from nltk.tokenize import word_tokenize
 from torch.nn.functional import normalize
-
 from visdialch.data import VisDialDataset
-from visdialch.data.readers import (
-    ImageFeaturesHdfReader,
-)
-from visdialch.data.vocabulary import Vocabulary
+from urllib.parse import urlparse
+
+
+# TODO: Add docstrings, hints
+def validate_url(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc, result.path])
+    except:
+        return False
 
 
 class DemoObject:
 
     def __init__(
             self,
+            caption_model,
+            enc_dec_model,
+            vocabulary,
             config: Dict[str, Any],
-            in_memory: bool = False,
+            cuda_device,
             add_boundary_toks: bool = True,
     ):
         super().__init__()
-        self.config = config
+        self.caption_model = caption_model
+        self.enc_dec_model = enc_dec_model
+        self.vocabulary = vocabulary
+        self.dataset_config = config["dataset"]
+        self.caption_config = config["captioning"]
+        self.cuda_device = cuda_device
         self.add_boundary_toks = add_boundary_toks
 
-        self.vocabulary = Vocabulary(
-            config["word_counts_json"], min_count=config["vocab_min_count"]
+        # Initialize class variables
+        self.image_features, self.image_caption_nl, self.image_caption = (
+            None, None, None
         )
-
-        # Extract the image-features from the image-path here
-        image_features_hdfpath = config["image_features_train_h5"]
-        self.hdf_reader = ImageFeaturesHdfReader(
-            image_features_hdfpath, in_memory
-        )
-
-        # Store image features of the selected image in our object
-        image_id = self.hdf_reader.keys()[-14]
-        print(f"Image id: {int(image_id)}")
-        image_features = torch.tensor(self.hdf_reader[image_id])
-        
-        if self.config["img_norm"]:
-            image_features = normalize(image_features, dim=0, p=2)
-        
-        self.image_features = image_features.unsqueeze(0)
-        
-        # Make the call for the generating caption here.
-        image_caption = "a group with drinks posing for a picture"
-
-        # Store the caption in natural language
-        self.image_caption_nl = image_caption
-        image_caption = word_tokenize(image_caption)
-        self.image_caption = self.vocabulary.to_indices(image_caption)
-
         self.questions, self.question_lengths = [], []
         self.answers, self.answer_lengths = [], []
         self.history, self.history_lengths = [], []
         self.num_rounds = 0
-        self.update()
 
-    # Call this method to retrive an object for inference, pass the
-    # natural language question asked by the user.
-    def get_data(self, question: Optional[str] = None):
+    # Call this method to retrive a dict object for inference. Pass the
+    # natural language question asked by the user as arg.
+    def _get_data(self, question: Optional[str] = None):
         data = {}
         data["img_feat"] = self.image_features
 
         # only pick the last entry as we process a single question at a time
-        data["hist"] = self.history[-1].view(1,1,-1).long()
+        data["hist"] = self.history[-1].view(1, 1, -1).long()
         data["hist_len"] = torch.tensor([self.history_lengths[-1]]).long()
 
+        # process the question and fill the inference dict object
         if question is not None:
-            # Create field for current question, I think we need to place
-            # questions one by one in data["ques"] field and move the
-            # older ones to history (done by update).
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)
             pad_question, question_length = VisDialDataset._pad_sequences(
-                self.config,
+                self.dataset_config,
                 self.vocabulary,
                 [question]
             )
@@ -86,17 +74,12 @@ class DemoObject:
 
         return data
 
-    # Call this method as we have new dialogs in conversation.
+    # Call this method as we have new dialogs (ques/ans pairs) in conversation.
     def update(
             self,
             question: Optional[str] = None,
             answer: Optional[str] = None,
-            caption: Optional[str] = None
     ):
-        if caption is not None:
-            caption = word_tokenize(caption)
-            self.image_caption = self.vocabulary.to_indices(caption)
-
         if question is not None:
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)
@@ -111,7 +94,7 @@ class DemoObject:
 
         # history does not take in padded inputs! 
         self.history, self.history_lengths = VisDialDataset._get_history(
-            self.config,
+            self.dataset_config,
             self.vocabulary,
             self.image_caption,
             self.questions,
@@ -120,10 +103,66 @@ class DemoObject:
         )
         self.num_rounds += 1
 
-    # Call this method to reset data
-    def reset(self):
-        pass
+    # Call this method to reset data, this is used internally by set_image()
+    def _reset(self):
+        self.image_features, self.image_caption_nl, self.image_caption = (
+            None, None, None
+        )
+        self.questions, self.question_lengths = [], []
+        self.answers, self.answer_lengths = [], []
+        self.history, self.history_lengths = [], []
+        self.num_rounds = 0
+
+    # Download, extract features and build caption for the image
+    def set_image(self, image_path):
+        self._reset()
+        if not os.path.isabs(image_path) and not validate_url(image_path):
+            image_path = os.path.abspath(image_path)
+        print(f"Loading image from : {image_path}")
+        caption_tokens, image_features = self.caption_model.predict(
+            image_path,
+            self.caption_config["detectron_model"]["feat_name"],
+            True,
+        )
+
+        if self.dataset_config["img_norm"]:
+            image_features = normalize(image_features, dim=0, p=2)
+
+        self.image_caption_nl = \
+        self.caption_model.caption_processor(caption_tokens.tolist()[0])[
+            "caption"]
+        self.image_caption = self.vocabulary.to_indices(
+            word_tokenize(self.image_caption_nl))
+        self.image_features = image_features.unsqueeze(0)
+        # build the initial history
+        self.update()
 
     # Returns natural language caption
     def get_caption(self):
-        return self.image_caption_nl
+        if self.image_caption_nl is not None:
+            return self.image_caption_nl
+        else:
+            raise TypeError("Image caption not found. Make sure set_image is "
+                            "called prior to using this command.")
+
+    # Respond to the user question
+    def respond(self, user_question):
+        batch = self._get_data(user_question)
+        for key in batch:
+            batch[key] = batch[key].to(self.cuda_device)
+
+        with torch.no_grad():
+            (eos_flag, max_len_flag), output = self.enc_dec_model(batch)
+        output = [word_idx.item() for word_idx in output.reshape(-1)]
+        answer = self.vocabulary.to_words(output)
+
+        # Throw away the trailing '<EOS>' tokens
+        if eos_flag:
+            first_eos_idx = answer.index(self.vocabulary.EOS_TOKEN)
+            answer = answer[:first_eos_idx]
+
+        # MosesDetokenizer used to detokenize, it is separated from nltk.
+        # Refer: https://pypi.org/project/mosestokenizer/
+        with MosesDetokenizer('en') as detokenize:
+            answer = detokenize(answer)
+        return answer
