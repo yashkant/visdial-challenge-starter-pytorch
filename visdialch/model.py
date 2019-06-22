@@ -14,17 +14,27 @@ class EncoderDecoderModel(nn.Module):
     decoder: nn.Module
     """
 
-    def __init__(self, model_config, vocabulary):
+    def __init__(self,
+                 model_config=None,
+                 vocabulary=None,
+                 encoder=None,
+                 decoder=None
+                 ):
         super().__init__()
-        # Pass vocabulary to construct Embedding layer.
-        self.encoder = Encoder(model_config, vocabulary)
-        self.decoder = Decoder(model_config, vocabulary)
+
+        if model_config is not None and vocabulary is not None:
+            self.encoder = Encoder(model_config, vocabulary)
+            self.decoder = Decoder(model_config, vocabulary)
+        elif encoder is not None and decoder is not None:
+            self.encoder = encoder
+            self.decoder = decoder
+        else:
+            raise ValueError("No constructor found for passed arguments")
 
         print("Encoder: {}".format(model_config["encoder"]))
         print("Decoder: {}".format(model_config["decoder"]))
-
         # Share word embedding between encoder and decoder.
-        decoder.word_embed = encoder.word_embed
+        self.decoder.word_embed = self.encoder.word_embed
 
     def forward(self, batch):
         encoder_output = self.encoder(batch)
