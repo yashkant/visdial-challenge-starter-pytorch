@@ -1,3 +1,5 @@
+import os
+
 import cv2
 import numpy as np
 import torch
@@ -99,35 +101,32 @@ def process_feature_extraction(output,
         feat_list.append(feats[i][keep_boxes])
 
         if not get_boxes:
-            return feat_list
+            return [feat_list]
 
         conf_list.append(max_conf[keep_boxes])
         boxes_list.append(max_box[keep_boxes])
         classes_list.append(max_cls[keep_boxes])
 
-    return boxes_list, feat_list, classes_list, conf_list
+    return [boxes_list, feat_list, classes_list, conf_list]
 
 
-# Given a single/list of image(s) returns features, bboxes, scores and classes
-def get_detectron_features(image_path,
+# Given a list of image(s) returns features, bboxes, scores and classes
+def get_detectron_features(image_paths,
                            detection_model,
                            get_boxes,
                            feat_name,
+                           device,
                            batch_mode=False):
     img_tensor, im_scales = [], []
 
     if batch_mode:
-        # TODO: Use better arg-name and loop vars
-        for img_path in image_path:
+        for img_path in image_paths:
             im, im_scale = image_transform(img_path)
             img_tensor.append(im)
             im_scales.append(im_scale)
-    else:
-        im, im_scale = image_transform(image_path)
-        img_tensor, im_scales = [im], [im_scale]
 
     current_img_list = to_image_list(img_tensor, size_divisible=32)
-    current_img_list = current_img_list.to('cuda')
+    current_img_list = current_img_list.to(device)
     with torch.no_grad():
         output = detection_model(current_img_list)
 
@@ -138,12 +137,10 @@ def get_detectron_features(image_path,
         feat_name=feat_name,
         conf_thresh=0.2
     )
+    return return_list
 
-    # TODO: looks dirty?
-    if batch_mode:
-        return return_list
-    if get_boxes:
-        return [item[0] for item in return_list]
+def get_abspath(path):
+    if not os.path.isabs(path):
+        return os.path.abspath(path)
     else:
-        return return_list[0]
-
+        return path

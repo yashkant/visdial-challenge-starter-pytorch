@@ -12,6 +12,7 @@ from pythia.tasks.processors import VocabProcessor, CaptionProcessor
 from pythia.utils.configuration import ConfigNode
 from .utils import get_detectron_features
 
+
 # TODO: Docstrings and hints
 class PythiaCaptioning:
     TARGET_IMAGE_SIZE = [448, 448]
@@ -36,10 +37,10 @@ class PythiaCaptioning:
 
         self.config = config
 
-        captioning_config = config.task_attributes.captioning\
+        captioning_config = config.task_attributes.captioning \
             .dataset_attributes.coco
         text_processor_config = captioning_config.processors.text_processor
-        caption_processor_config = captioning_config.processors\
+        caption_processor_config = captioning_config.processors \
             .caption_processor
         vocab_file_path = self.caption_config[
             "text_caption_processor_vocab_txt"]
@@ -82,11 +83,14 @@ class PythiaCaptioning:
     def predict(self, url, feat_name, get_features=False):
         with torch.no_grad():
             detectron_features = get_detectron_features(
-                url,
+                [url],
                 self.detection_model,
                 False,
-                feat_name = feat_name
+                feat_name,
+                self.cuda_device
             )
+            # returns a single-element list
+            detectron_features = detectron_features[0]
 
             sample = Sample()
             sample.dataset_name = "coco"
@@ -116,7 +120,7 @@ class PythiaCaptioning:
         model = build_detection_model(cfg)
         checkpoint = torch.load(
             self.caption_config["detectron_model"]["model_pth"],
-            map_location=torch.device("cpu"))
+            map_location=self.cuda_device)
 
         load_state_dict(model, checkpoint.pop("model"))
 
