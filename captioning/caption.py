@@ -99,7 +99,7 @@ class PythiaCaptioning:
             sample.answers = torch.zeros((5, 10), dtype=torch.long)
 
             sample_list = SampleList([sample])
-            sample_list = sample_list.to("cuda")
+            sample_list = sample_list.to(self.cuda_device)
 
             tokens = self.pythia_model(sample_list)["captions"]
 

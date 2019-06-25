@@ -1,5 +1,7 @@
 from typing import Any, Dict, List, Optional
 
+import cv2
+import numpy as np
 import torch
 from torch.nn.functional import normalize
 from torch.nn.utils.rnn import pad_sequence
@@ -9,9 +11,9 @@ from visdialch.data.readers import (
     DialogsReader,
     DenseAnnotationsReader,
     ImageFeaturesHdfReader,
+    RawImageReader
 )
 from visdialch.data.vocabulary import Vocabulary
-
 
 class VisDialDataset(Dataset):
     """
@@ -331,3 +333,51 @@ class VisDialDataset(Dataset):
         )
         maxpadded_history[:, : padded_history.size(1)] = padded_history
         return maxpadded_history, history_lengths
+
+
+class RawImageDataset(Dataset):
+    def __init__(self, image_dirs: str, split: str, transform: bool, in_mem: bool) -> None:
+        super().__init__()
+        self.in_mem = in_mem
+        self.raw_image_reader = RawImageReader(image_dirs, split, in_mem)
+        self.image_ids = self.raw_image_reader.image_ids
+        self.transform = transform
+
+    def __getitem__(self, index):
+        item = {}
+        image_id = self.image_ids[index]
+        # apply transforms here and pack image in a dict
+        image = self.raw_image_reader[image_id]
+        item["image"] = image
+        if self.transform:
+            item["image"], item["im_scale"] = self.image_transform(image)
+        return item
+
+    def __len__(self):
+        return len(self.image_ids)
+
+    @property
+    def split(self):
+        return self.raw_image_reader.split
+
+    def image_transform(self, image):
+        im = np.array(image).astype(np.float32)
+        im = im[:, :, ::-1]
+        im -= np.array([102.9801, 115.9465, 122.7717])
+        im_shape = im.shape
+        im_size_min = np.min(im_shape[0:2])
+        im_size_max = np.max(im_shape[0:2])
+        im_scale = float(800) / float(im_size_min)
+        # Prevent the biggest axis from being more than max_size
+        if np.round(im_scale * im_size_max) > 1333:
+            im_scale = float(1333) / float(im_size_max)
+        im = cv2.resize(
+            im,
+            None,
+            None,
+            fx=im_scale,
+            fy=im_scale,
+            interpolation=cv2.INTER_LINEAR
+        )
+        img = torch.from_numpy(im).permute(2, 0, 1)
+        return img, im_scale

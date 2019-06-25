@@ -10,18 +10,17 @@ from maskrcnn_benchmark.structures.image_list import to_image_list
 
 # TODO: Comments, Docstrings, Cleanup.
 
-def get_actual_image(image_path):
+def read_actual_image(image_path):
     if image_path.startswith('http'):
         path = requests.get(image_path, stream=True).raw
     else:
         path = image_path
-
-    return path
+    img = Image.open(path)
+    return img
 
 
 def image_transform(image_path):
-    path = get_actual_image(image_path)
-    img = Image.open(path)
+    img = read_actual_image(image_path)
     im = np.array(img).astype(np.float32)
     im = im[:, :, ::-1]
     im -= np.array([102.9801, 115.9465, 122.7717])

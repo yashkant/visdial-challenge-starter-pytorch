@@ -14,13 +14,17 @@ Each reader must atleast implement three methods:
 """
 
 import copy
+import glob
 import json
+import os
 from typing import Dict, List, Union
+import requests
 
 import h5py
 
 # A bit slow, and just splits sentences to list of words, can be doable in
 # `DialogsReader`.
+from PIL import Image
 from nltk.tokenize import word_tokenize
 from tqdm import tqdm
 
@@ -166,6 +170,76 @@ class DenseAnnotationsReader(object):
     def split(self):
         # always
         return "val"
+
+
+class RawImageReader(object):
+    """
+    A reader for raw images given the path. You need to pass as argument the
+    split type (`train`, `test`, `val`)
+
+    Parameters
+    ----------
+    image_dir_path : str
+        Path to a directory containing raw images
+    """
+
+    def __init__(self, image_dirs: str, split: str, in_mem: bool):
+        # list of paths (example: "coco_train2014/COCO_train2014_*.jpg")
+        image_paths, image_ids = [], []
+        for image_dir in image_dirs:
+            image_paths.extend(
+                [
+                    os.path.join(image_dir, name)
+                    for name in glob.glob(os.path.join(image_dir, "*.jpg"))
+                    if name not in {".", ".."}
+                ]
+            )
+
+        for img_path in image_paths:
+            image_ids.append(int(img_path.split("/")[-1][-16:-4]))
+
+        # read and store images from paths (TODO: add in-mem option)
+        images = []
+        for img_path in image_paths:
+            if in_mem:
+                images.append(self.read_actual_image(img_path))
+            else:
+                images.append(None)
+
+        self._image_paths = image_paths
+        self._image_ids = image_ids
+        self._images = images
+        self._split = split
+
+    def read_actual_image(self, image_path):
+        if image_path.startswith('http'):
+            path = requests.get(image_path, stream=True).raw
+        else:
+            path = image_path
+        img = Image.open(path)
+        return img
+
+    def __len__(self):
+        return len(self._image_ids)
+
+    def __getitem__(self, image_id: int) -> Dict[str, Union[int, List]]:
+        index = self._image_ids.index(image_id)
+        image_path = self._image_paths[index]
+        image = self._images[index]
+        if image is not None:
+            return image
+        else:
+            image = self.read_actual_image(image_path)
+            self._images.append(image)
+        return image
+
+    @property
+    def split(self):
+        return self._split
+
+    @property
+    def image_ids(self):
+        return self._image_ids
 
 
 class ImageFeaturesHdfReader(object):

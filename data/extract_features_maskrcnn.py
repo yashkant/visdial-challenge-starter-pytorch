@@ -3,6 +3,7 @@ import glob
 import os
 import torch
 import cv2  # must import before importing caffe2 due to bug in cv2
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import h5py
 import yaml
@@ -19,7 +20,8 @@ from maskrcnn_benchmark.modeling.detector import (
 from maskrcnn_benchmark.utils.model_serialization import (
     load_state_dict
 )
-from captioning.utils import get_detectron_features, get_abspath
+from captioning.utils import process_feature_extraction
+from visdialch.data.dataset import RawImageDataset
 
 # OpenCL may be enabled by default in OpenCV3; disable it because it's not
 # thread safe and causes unwanted GPU memory allocations.
@@ -110,6 +112,8 @@ def main(args):
         Parsed command-line arguments.
     """
     # load config
+    # TODO: We just require captioning config only, so let's keep a local file
+    # TODO: Also add batch_size and other extraction specific configs to file
     visdial_path = os.getcwd() + "/../"
     config = yaml.load(open(visdial_path + args.config))
     caption_config = config["captioning"]
@@ -141,17 +145,6 @@ def main(args):
     load_state_dict(detection_model, checkpoint.pop("model"))
     detection_model.eval()
 
-    # list of paths (example: "coco_train2014/COCO_train2014_000000123456.jpg")
-    image_paths = []
-    for image_root in args.image_root:
-        image_paths.extend(
-            [
-                os.path.join(image_root, name)
-                for name in glob.glob(os.path.join(image_root, "*.jpg"))
-                if name not in {".", ".."}
-            ]
-        )
-
     # create an output HDF to save extracted features
     save_h5 = h5py.File(args.save_path, "w")
     image_ids_h5d = save_h5.create_dataset(
@@ -171,20 +164,49 @@ def main(args):
         "scores", (len(image_paths), args.max_boxes,),
     )
 
-    batch_size = args.batch_size
-    mini_batches = len(image_paths) // batch_size
 
-    for iter in tqdm(range(mini_batches + 1), desc="Processing Batches"):
-        print(f"Iteration: {iter}")
-        idx_start, idx_end = iter * batch_size, (iter + 1) * batch_size
-        batch_image_paths = image_paths[idx_start:idx_end]
-        boxes, features, classes, scores = get_detectron_features(
-            batch_image_paths,
-            detection_model,
-            True,
-            args.feat_name,
-            device,
-            batch_mode=True
+
+    # # list of paths (example: "coco_train2014/COCO_train2014_000000123456.jpg")
+    # image_paths = []
+    # for image_root in args.image_root:
+    #     image_paths.extend(
+    #         [
+    #             os.path.join(image_root, name)
+    #             for name in glob.glob(os.path.join(image_root, "*.jpg"))
+    #             if name not in {".", ".."}
+    #         ]
+    #     )
+
+    raw_image_dataset = RawImageDataset(args.image_root, args.split)
+    raw_image_dataloader = DataLoader(
+        raw_image_dataset,
+        batch_size=args.batch_size,
+        num_workers=4,
+        shuffle=True,
+    )
+
+    for i, batch in enumerate(tqdm(raw_image_dataloader)):
+        print(f"Batch no: {i}")
+        batch_size = len(batch)
+
+        # calculate idx_start and idx_end
+        idx_start, idx_end = i * batch_size, (i + 1) * batch_size
+
+        # shape: ( batch_size, dict )
+        im_scales = []
+        for key in batch:
+            batch[key] = batch[key].to(device)
+            im_scales.append(batch[key]["image_scale"])
+
+        with torch.no_grad():
+            output = detection_model(batch)
+
+        boxes, features, classes, scores = process_feature_extraction(
+            output,
+            im_scales,
+            get_boxes=get_boxes,
+            feat_name=feat_name,
+            conf_thresh=0.2
         )
         boxes_h5d[idx_start:idx_end] = np.array(
             [item.cpu().numpy() for item in boxes])
@@ -194,6 +216,33 @@ def main(args):
             [item.cpu().numpy() for item in classes])
         scores_h5d[idx_start:idx_end] = np.array(
             [item.cpu().numpy() for item in classes])
+
+
+
+
+
+    # batch_size = args.batch_size
+    # mini_batches = len(image_paths) // batch_size
+    # for iter in tqdm(range(mini_batches + 1), desc="Processing Batches"):
+    #     print(f"Iteration: {iter}")
+    #     idx_start, idx_end = iter * batch_size, (iter + 1) * batch_size
+    #     batch_image_paths = image_paths[idx_start:idx_end]
+    #     boxes, features, classes, scores = get_detectron_features(
+    #         batch_image_paths,
+    #         detection_model,
+    #         True,
+    #         args.feat_name,
+    #         device,
+    #         batch_mode=True
+    #     )
+    #     boxes_h5d[idx_start:idx_end] = np.array(
+    #         [item.cpu().numpy() for item in boxes])
+    #     features_h5d[idx_start:idx_end] = np.array(
+    #         [item.cpu().numpy() for item in features])
+    #     classes_h5d[idx_start:idx_end] = np.array(
+    #         [item.cpu().numpy() for item in classes])
+    #     scores_h5d[idx_start:idx_end] = np.array(
+    #         [item.cpu().numpy() for item in classes])
 
     # set current split name in attributrs of file, for tractability
     save_h5.attrs["split"] = args.split
