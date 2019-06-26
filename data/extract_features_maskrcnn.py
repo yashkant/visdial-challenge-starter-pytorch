@@ -27,6 +27,8 @@ from visdialch.data.dataset import RawImageDataset
 # thread safe and causes unwanted GPU memory allocations.
 cv2.ocl.setUseOpenCL(False)
 
+# TODO: See if torchvision.datasets.ImageFolder can help simplify data loading
+
 parser = argparse.ArgumentParser(
     description="Extract bottom-up features from a model trained by Detectron"
 )
@@ -72,10 +74,10 @@ parser.add_argument(
     help="Which split is being processed.",
 )
 parser.add_argument(
-    "--gpu-id",
+    "--gpu-ids",
     help="The GPU id to use (-1 for CPU execution)",
     type=int,
-    default=0,
+    default=[0,1],
 )
 parser.add_argument(
     "--batch-size",
@@ -145,26 +147,14 @@ def main(args):
     load_state_dict(detection_model, checkpoint.pop("model"))
     detection_model.eval()
 
-    # create an output HDF to save extracted features
-    save_h5 = h5py.File(args.save_path, "w")
-    image_ids_h5d = save_h5.create_dataset(
-        "image_ids", (len(image_paths),), dtype=int
-    )
-
-    boxes_h5d = save_h5.create_dataset(
-        "boxes", (len(image_paths), args.max_boxes, 4),
-    )
-    features_h5d = save_h5.create_dataset(
-        "features", (len(image_paths), args.max_boxes, args.feat_dims),
-    )
-    classes_h5d = save_h5.create_dataset(
-        "classes", (len(image_paths), args.max_boxes,),
-    )
-    scores_h5d = save_h5.create_dataset(
-        "scores", (len(image_paths), args.max_boxes,),
-    )
-
-
+    # used to handle variable size images inside the dataloader
+    def collate_function(batch):
+        import pdb
+        pdb.set_trace()
+        data = [item[0] for item in batch]
+        target = [item[1] for item in batch]
+        target = torch.LongTensor(target)
+        return [data, target]
 
     # # list of paths (example: "coco_train2014/COCO_train2014_000000123456.jpg")
     # image_paths = []
@@ -177,13 +167,34 @@ def main(args):
     #         ]
     #     )
 
-    raw_image_dataset = RawImageDataset(args.image_root, args.split)
+    raw_image_dataset = RawImageDataset(args.image_root, args.split, True, True)
     raw_image_dataloader = DataLoader(
         raw_image_dataset,
         batch_size=args.batch_size,
         num_workers=4,
         shuffle=True,
+        collate_fn=collate_function
     )
+
+    # create an output HDF to save extracted features
+    save_h5 = h5py.File(args.save_path, "w")
+    image_ids_h5d = save_h5.create_dataset(
+        "image_ids", (len(raw_image_dataset),), dtype=int
+    )
+
+    boxes_h5d = save_h5.create_dataset(
+        "boxes", (len(raw_image_dataset), args.max_boxes, 4),
+    )
+    features_h5d = save_h5.create_dataset(
+        "features", (len(raw_image_dataset), args.max_boxes, args.feat_dims),
+    )
+    classes_h5d = save_h5.create_dataset(
+        "classes", (len(raw_image_dataset), args.max_boxes,),
+    )
+    scores_h5d = save_h5.create_dataset(
+        "scores", (len(raw_image_dataset), args.max_boxes,),
+    )
+
 
     for i, batch in enumerate(tqdm(raw_image_dataloader)):
         print(f"Batch no: {i}")
