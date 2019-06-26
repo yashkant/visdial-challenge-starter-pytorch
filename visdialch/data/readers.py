@@ -217,6 +217,7 @@ class RawImageReader(object):
         else:
             path = image_path
         img = Image.open(path)
+        img.load()
         return img
 
     def __len__(self):

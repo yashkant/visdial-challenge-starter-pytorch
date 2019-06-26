@@ -16,6 +16,7 @@ def read_actual_image(image_path):
     else:
         path = image_path
     img = Image.open(path)
+    img.load()
     return img
 
 
