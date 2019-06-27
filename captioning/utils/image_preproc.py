@@ -144,3 +144,23 @@ def get_abspath(path):
         return os.path.abspath(path)
     else:
         return path
+
+def pad_raw_image_batch(images: torch.Tensor, size_divisible: int = 0):
+    max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
+    if size_divisible > 0:
+        import math
+
+        stride = size_divisible
+        max_size = list(max_size)
+        max_size[1] = int(math.ceil(max_size[1] / stride) * stride)
+        max_size[2] = int(math.ceil(max_size[2] / stride) * stride)
+        max_size = tuple(max_size)
+
+    batch_shape = (len(images),) + max_size
+    batched_imgs = images[0].new(*batch_shape).zero_()
+    for img, pad_img in zip(images, batched_imgs):
+        pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+
+    image_sizes = [im.shape[-2:] for im in batched_imgs]
+
+    return batched_imgs, image_sizes

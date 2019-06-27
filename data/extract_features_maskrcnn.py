@@ -20,7 +20,7 @@ from maskrcnn_benchmark.modeling.detector import (
 from maskrcnn_benchmark.utils.model_serialization import (
     load_state_dict
 )
-from captioning.utils import process_feature_extraction
+from captioning.utils import process_feature_extraction, pad_raw_image_batch
 from visdialch.data.dataset import RawImageDataset
 
 # OpenCL may be enabled by default in OpenCV3; disable it because it's not
@@ -83,7 +83,7 @@ parser.add_argument(
     "--batch-size",
     help="Batch size for no. of images to be processed in one iteration",
     type=int,
-    default=8,
+    default=4,
 )
 
 
@@ -149,30 +149,27 @@ def main(args):
 
     # used to handle variable size images inside the dataloader
     def collate_function(batch):
-        import pdb
-        pdb.set_trace()
-        data = [item[0] for item in batch]
-        target = [item[1] for item in batch]
-        target = torch.LongTensor(target)
-        return [data, target]
+        # print(f"Debug: collate_function, target shape {len(batch)}, {type(batch[0])}")
+        # I think batch is (n, item)
+        item_batch = {}
+        item_batch["image"] = []
+        # item_batch["im_scale"] = []
+        for item in batch:
+            item_batch["image"].append(item["image"])
+            # item_batch["im_scale"].append(item["im_scale"])
 
-    # # list of paths (example: "coco_train2014/COCO_train2014_000000123456.jpg")
-    # image_paths = []
-    # for image_root in args.image_root:
-    #     image_paths.extend(
-    #         [
-    #             os.path.join(image_root, name)
-    #             for name in glob.glob(os.path.join(image_root, "*.jpg"))
-    #             if name not in {".", ".."}
-    #         ]
-    #     )
+        item_batch["image"], item_batch["image_size"] = pad_raw_image_batch(
+            item_batch["image"],
+            32
+        )
+        return item_batch
 
-    raw_image_dataset = RawImageDataset(args.image_root, args.split, True, True)
+    raw_image_dataset = RawImageDataset(args.image_root, args.split, True, False)
     raw_image_dataloader = DataLoader(
         raw_image_dataset,
         batch_size=args.batch_size,
         num_workers=4,
-        shuffle=True,
+        shuffle=False,
         collate_fn=collate_function
     )
 
@@ -197,20 +194,26 @@ def main(args):
 
 
     for i, batch in enumerate(tqdm(raw_image_dataloader)):
-        print(f"Batch no: {i}")
         batch_size = len(batch)
-
+        print(f"Batch no: {i}, batch_size: {batch_size}")
         # calculate idx_start and idx_end
-        idx_start, idx_end = i * batch_size, (i + 1) * batch_size
-
+        idx_start, idx_end = i * 8, (i + 1) * 8
         # shape: ( batch_size, dict )
         im_scales = []
+        import pdb
+
         for key in batch:
+            if isinstance(batch[key], list):
+                batch[key] = torch.Tensor(batch[key])
             batch[key] = batch[key].to(device)
-            im_scales.append(batch[key]["image_scale"])
+
+        pdb.set_trace()
 
         with torch.no_grad():
             output = detection_model(batch)
+
+        # import pdb
+        pdb.set_trace()
 
         boxes, features, classes, scores = process_feature_extraction(
             output,
@@ -219,6 +222,8 @@ def main(args):
             feat_name=feat_name,
             conf_thresh=0.2
         )
+
+
         boxes_h5d[idx_start:idx_end] = np.array(
             [item.cpu().numpy() for item in boxes])
         features_h5d[idx_start:idx_end] = np.array(
@@ -227,33 +232,6 @@ def main(args):
             [item.cpu().numpy() for item in classes])
         scores_h5d[idx_start:idx_end] = np.array(
             [item.cpu().numpy() for item in classes])
-
-
-
-
-
-    # batch_size = args.batch_size
-    # mini_batches = len(image_paths) // batch_size
-    # for iter in tqdm(range(mini_batches + 1), desc="Processing Batches"):
-    #     print(f"Iteration: {iter}")
-    #     idx_start, idx_end = iter * batch_size, (iter + 1) * batch_size
-    #     batch_image_paths = image_paths[idx_start:idx_end]
-    #     boxes, features, classes, scores = get_detectron_features(
-    #         batch_image_paths,
-    #         detection_model,
-    #         True,
-    #         args.feat_name,
-    #         device,
-    #         batch_mode=True
-    #     )
-    #     boxes_h5d[idx_start:idx_end] = np.array(
-    #         [item.cpu().numpy() for item in boxes])
-    #     features_h5d[idx_start:idx_end] = np.array(
-    #         [item.cpu().numpy() for item in features])
-    #     classes_h5d[idx_start:idx_end] = np.array(
-    #         [item.cpu().numpy() for item in classes])
-    #     scores_h5d[idx_start:idx_end] = np.array(
-    #         [item.cpu().numpy() for item in classes])
 
     # set current split name in attributrs of file, for tractability
     save_h5.attrs["split"] = args.split
