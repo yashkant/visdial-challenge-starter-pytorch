@@ -6,7 +6,7 @@ import yaml
 
 from captioning import PythiaCaptioning
 from visdialch.data import Vocabulary
-from visdialch.data.demo_object import DemoObject
+from visdialch.data.demo_manager import DemoSessionManager
 from visdialch.model import EncoderDecoderModel
 
 parser = argparse.ArgumentParser(
@@ -15,19 +15,14 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--config-yml",
     default="configs/lf_gen_faster_rcnn_x101_demo.yml",
-    help="Path to a config file listing reader, model and optimization "
-         "parameters.",
+    help="Path to a config file listing reader, visual dialog and captioning "
+         "model parameters.",
 )
 
 parser.add_argument_group("Demo related arguments")
-parser.add_argument(
-    "--load-pthpath",
-    default="checkpoints/lf_gen_faster_rcnn_x101_train.pth",
-    help="Path to .pth file of pretrained checkpoint.",
-)
 
 parser.add_argument(
-    "--imagepath",
+    "--image-path",
     default="/nethome/ykant3/tmp/COCO_test2014_000000355148.jpg",
     help="Path to .pth file of pretrained checkpoint.",
 )
@@ -106,14 +101,14 @@ vocabulary = Vocabulary(
 
 # Build Encoder-Decoder model and load its checkpoint
 enc_dec_model = EncoderDecoderModel(model_config, vocabulary).to(device)
-enc_dec_model.load_checkpoint(args.load_pthpath)
+enc_dec_model.load_checkpoint(model_config["model_pth"])
 
 # Build the captioning model and load its checkpoint
 # Path to the checkpoint is picked from captioning_config
 caption_model = PythiaCaptioning(captioning_config, device)
 
 # Pass the Captioning and Encoder-Decoder models and initialize DemoObject
-demo_object = DemoObject(
+demo_object = DemoSessionManager(
     caption_model,
     enc_dec_model,
     vocabulary,
@@ -122,19 +117,22 @@ demo_object = DemoObject(
 )
 
 # =============================================================================
-#   EVALUATION LOOP
+#   DEMO LOOP
 # =============================================================================
 
+# Switch dropout, batchnorm etc to the correct mode.
 enc_dec_model.eval()
 
-# Extract features and build caption for the image
-demo_object.set_image(args.imagepath)
+# Extract image features and build caption
+demo_object.set_image(args.image_path)
 print(f"Caption: {demo_object.get_caption()}")
+
 while True:
+
+    # Input question, respond to it and update history
     user_question = input("Type Question: ").lower()
     answer = demo_object.respond(user_question)
     print(f"Answer: {answer}")
-    demo_object.update(question=user_question, answer=answer)
 
     while True:
         user_input = input("Change Image? [(y)es/(n)o]: ").lower()
