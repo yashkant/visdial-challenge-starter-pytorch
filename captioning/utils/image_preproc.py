@@ -63,8 +63,6 @@ def process_feature_extraction(output,
     conf_list = []
 
     for i in range(batch_size):
-        import pdb
-        pdb.set_trace()
         op = output[0]["fc6"]
         print(f"Debug: im_scales={im_scales.device}, output={op.device}")
 

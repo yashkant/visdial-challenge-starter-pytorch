@@ -181,9 +181,6 @@ def main(args):
         "image_ids", (len(raw_image_dataset),), dtype=int
     )
 
-    import pdb
-    pdb.set_trace()
-
     boxes_h5d = save_h5.create_dataset(
         "boxes", (len(raw_image_dataset), args.max_boxes, 4),
     )
@@ -220,16 +217,13 @@ def main(args):
             
             batch[key] = batch[key].to(device)
 
-        import pdb
-
         with torch.no_grad():
             output = detection_model(batch)
 
         output = rearrange_ouput(output)
         feat_name = caption_config["detectron_model"]["feat_name"]
         get_boxes = True
-        # pdb.set_trace()
-        
+
         boxes, features, classes, scores = process_feature_extraction(
             output,
             batch["im_scales"],
