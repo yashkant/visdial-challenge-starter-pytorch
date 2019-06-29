@@ -69,7 +69,7 @@ class DemoSessionManager:
         self.num_rounds = 0
 
     def _get_data(self, question: str):
-        r""" Build a dict object for inference inside the Visdial
+        r""" Build a dict object for inference with the Visdial
         model from natural language question. This is used internally by the
         ``self.respond`` method.
 

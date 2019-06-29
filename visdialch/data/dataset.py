@@ -15,6 +15,7 @@ from visdialch.data.readers import (
 )
 from visdialch.data.vocabulary import Vocabulary
 
+
 class VisDialDataset(Dataset):
     """
     A full representation of VisDial v1.0 (train/val/test) dataset. According
@@ -336,7 +337,29 @@ class VisDialDataset(Dataset):
 
 
 class RawImageDataset(Dataset):
-    def __init__(self, image_dirs: str, split: str, transform: bool, in_mem: bool) -> None:
+    """
+    Represents dataset built from a list folders containing raw images. This
+    is used inside feature extraction script to load images and extract
+    features.
+
+    Attributes
+    ----------
+    image_dirs : ``List[str]``
+        List of paths to read images from.
+    split : ``str``
+        Type of split of the dataset associated with the images.
+    transform : ``bool``
+        Apply `self.image_transform` to images loaded.
+    in_mem : ``bool``
+        Load all the images in memory during initialization else go lazy.
+
+    """
+
+    def __init__(self,
+                 image_dirs: List[str],
+                 split: str,
+                 transform: bool,
+                 in_mem: bool) -> None:
         super().__init__()
         self.in_mem = in_mem
         self.raw_image_reader = RawImageReader(image_dirs, split, in_mem)
@@ -363,6 +386,21 @@ class RawImageDataset(Dataset):
         return self.raw_image_reader.split
 
     def image_transform(self, image):
+        r""" Apply image transformation. This is used internally by the
+        ``self.__getitem__`` method.
+
+        Parameters
+        ----------
+        image : ``np.array``
+            Image passed as numpy array.
+
+        Returns
+        -------
+        [torch.Tensor, float]
+            Tuple of image and rescaling factor.
+
+        """
+
         im = np.array(image).astype(np.float32)
         im = im[:, :, ::-1]
         im -= np.array([102.9801, 115.9465, 122.7717])
