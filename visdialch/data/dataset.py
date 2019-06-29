@@ -351,8 +351,6 @@ class RawImageDataset(Dataset):
         item["image"] = image
         if self.transform:
             item["image"], item["im_scale"] = self.image_transform(image)
-        # apply padding here to make sizes same, otherwise we can't stack them 
-        # with dataloader
         return item
 
     def __len__(self):

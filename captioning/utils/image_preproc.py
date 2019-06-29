@@ -63,7 +63,13 @@ def process_feature_extraction(output,
     conf_list = []
 
     for i in range(batch_size):
-        dets = output[0]["proposals"][i].bbox / im_scales[i]
+        import pdb
+        pdb.set_trace()
+        op = output[0]["fc6"]
+        print(f"Debug: im_scales={im_scales.device}, output={op.device}")
+
+        # bbox below stays on cuda device 1 from where it came
+        dets = output[0]["proposals"][i].bbox.to(cur_device) / im_scales[i]
         scores = score_list[i]
 
         max_conf = torch.zeros((scores.shape[0])).to(cur_device)
@@ -75,6 +81,8 @@ def process_feature_extraction(output,
 
         for cls_ind in range(1, scores.shape[1]):
             cls_scores = scores[:, cls_ind]
+            print(f"Debug: scores={scores.device}, cls_scores={cls_scores.device}")
+            print(f"Debug: ind={cls_ind}")
             keep = nms(dets, cls_scores, 0.5)
 
             if get_boxes:

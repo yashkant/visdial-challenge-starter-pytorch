@@ -83,7 +83,7 @@ parser.add_argument(
     "--batch-size",
     help="Batch size for no. of images to be processed in one iteration",
     type=int,
-    default=4,
+    default=2,
 )
 
 
@@ -133,7 +133,7 @@ def main(args):
         else torch.device("cpu")
     )
 
-    # TODO: pretty print config and use get_abspath, put config file in cwd
+    # TODO: pretty print config and usedse get_abspath, put config file in cwd
     # build mask-rcnn detection model
     detection_model = build_detection_model(cfg)
     detection_model.to(device)
@@ -153,17 +153,19 @@ def main(args):
         # I think batch is (n, item)
         item_batch = {}
         item_batch["image"] = []
-        # item_batch["im_scale"] = []
+        item_batch["im_scales"] = []
         for item in batch:
             item_batch["image"].append(item["image"])
-            # item_batch["im_scale"].append(item["im_scale"])
+            item_batch["im_scales"].append(item["im_scale"])
 
         item_batch["image"], item_batch["image_size"] = pad_raw_image_batch(
             item_batch["image"],
             32
         )
         return item_batch
-
+    
+    print("Model loaded, Loading Dataset next")
+    
     raw_image_dataset = RawImageDataset(args.image_root, args.split, True, False)
     raw_image_dataloader = DataLoader(
         raw_image_dataset,
@@ -179,6 +181,9 @@ def main(args):
         "image_ids", (len(raw_image_dataset),), dtype=int
     )
 
+    import pdb
+    pdb.set_trace()
+
     boxes_h5d = save_h5.create_dataset(
         "boxes", (len(raw_image_dataset), args.max_boxes, 4),
     )
@@ -191,33 +196,43 @@ def main(args):
     scores_h5d = save_h5.create_dataset(
         "scores", (len(raw_image_dataset), args.max_boxes,),
     )
+    print("Dataset loaded")
+
+    # rearrange output from the model from process_feat_extraction function
+    def rearrange_ouput(output):
+        for key in output[0].keys():
+            if isinstance(output[0][key], torch.Tensor):
+                embed_dim = output[0][key].shape[-1]
+                output[0][key] = output[0][key].view(-1, embed_dim)
+        return output
 
 
     for i, batch in enumerate(tqdm(raw_image_dataloader)):
-        batch_size = len(batch)
-        print(f"Batch no: {i}, batch_size: {batch_size}")
-        # calculate idx_start and idx_end
-        idx_start, idx_end = i * 8, (i + 1) * 8
-        # shape: ( batch_size, dict )
-        im_scales = []
-        import pdb
 
+        # calculate idx_start and idx_end
+        batch_size = args.batch_size
+        idx_start, idx_end = i * batch_size, (i + 1) * batch_size
+
+        # shape: ( batch_size, dict )
         for key in batch:
             if isinstance(batch[key], list):
                 batch[key] = torch.Tensor(batch[key])
+            
             batch[key] = batch[key].to(device)
 
-        pdb.set_trace()
+        import pdb
 
         with torch.no_grad():
             output = detection_model(batch)
 
-        # import pdb
-        pdb.set_trace()
-
+        output = rearrange_ouput(output)
+        feat_name = caption_config["detectron_model"]["feat_name"]
+        get_boxes = True
+        # pdb.set_trace()
+        
         boxes, features, classes, scores = process_feature_extraction(
             output,
-            im_scales,
+            batch["im_scales"],
             get_boxes=get_boxes,
             feat_name=feat_name,
             conf_thresh=0.2
