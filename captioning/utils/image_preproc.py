@@ -1,25 +1,27 @@
+import os
 import cv2
 import numpy as np
 import torch
 import requests
+import math
 from PIL import Image
 from maskrcnn_benchmark.layers import nms
 from maskrcnn_benchmark.structures.image_list import to_image_list
 
 # TODO: Comments, Docstrings, Cleanup.
 
-def get_actual_image(image_path):
+def read_actual_image(image_path):
     if image_path.startswith('http'):
         path = requests.get(image_path, stream=True).raw
     else:
         path = image_path
-
-    return path
+    img = Image.open(path)
+    img.load() # close the loaded image
+    return img
 
 
 def image_transform(image_path):
-    path = get_actual_image(image_path)
-    img = Image.open(path)
+    img = read_actual_image(image_path)
     im = np.array(img).astype(np.float32)
     im = im[:, :, ::-1]
     im -= np.array([102.9801, 115.9465, 122.7717])
@@ -44,6 +46,7 @@ def image_transform(image_path):
 
 def process_feature_extraction(output,
                                im_scales,
+                               max_boxes=100,
                                get_boxes=False,
                                feat_name='fc6',
                                conf_thresh=0.2):
@@ -61,7 +64,8 @@ def process_feature_extraction(output,
     conf_list = []
 
     for i in range(batch_size):
-        dets = output[0]["proposals"][i].bbox / im_scales[i]
+        # bbox below stays on the device where it was generated
+        dets = output[0]["proposals"][i].bbox.to(cur_device) / im_scales[i]
         scores = score_list[i]
 
         max_conf = torch.zeros((scores.shape[0])).to(cur_device)
@@ -95,7 +99,7 @@ def process_feature_extraction(output,
             )
 
         # TODO: add max-boxes config instead of 100 and use below
-        keep_boxes = torch.argsort(max_conf, descending=True)[:100]
+        keep_boxes = torch.argsort(max_conf, descending=True)[:max_boxes]
         feat_list.append(feats[i][keep_boxes])
 
         if not get_boxes:
@@ -105,29 +109,24 @@ def process_feature_extraction(output,
         boxes_list.append(max_box[keep_boxes])
         classes_list.append(max_cls[keep_boxes])
 
-    return boxes_list, feat_list, classes_list, conf_list
+    return [boxes_list, feat_list, classes_list, conf_list]
 
 
-# Given a single/list of image(s) returns features, bboxes, scores and classes
-def get_detectron_features(image_path,
+# Given a list of image(s) returns features, bboxes, scores and classes
+def get_detectron_features(image_paths,
                            detection_model,
                            get_boxes,
                            feat_name,
-                           batch_mode=False):
+                           device):
     img_tensor, im_scales = [], []
 
-    if batch_mode:
-        # TODO: Use better arg-name and loop vars
-        for img_path in image_path:
-            im, im_scale = image_transform(img_path)
-            img_tensor.append(im)
-            im_scales.append(im_scale)
-    else:
-        im, im_scale = image_transform(image_path)
-        img_tensor, im_scales = [im], [im_scale]
+    for img_path in image_paths:
+        im, im_scale = image_transform(img_path)
+        img_tensor.append(im)
+        im_scales.append(im_scale)
 
     current_img_list = to_image_list(img_tensor, size_divisible=32)
-    current_img_list = current_img_list.to('cuda')
+    current_img_list = current_img_list.to(device)
     with torch.no_grad():
         output = detection_model(current_img_list)
 
@@ -138,12 +137,28 @@ def get_detectron_features(image_path,
         feat_name=feat_name,
         conf_thresh=0.2
     )
+    return return_list
 
-    # TODO: looks dirty?
-    if batch_mode:
-        return return_list
-    if get_boxes:
-        return [item[0] for item in return_list]
+def get_abspath(path):
+    if not os.path.isabs(path):
+        return os.path.abspath(path)
     else:
-        return return_list[0]
+        return path
 
+def pad_raw_image_batch(images: torch.Tensor, size_divisible: int = 0):
+    max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
+    if size_divisible > 0:
+        stride = size_divisible
+        max_size = list(max_size)
+        max_size[1] = int(math.ceil(max_size[1] / stride) * stride)
+        max_size[2] = int(math.ceil(max_size[2] / stride) * stride)
+        max_size = tuple(max_size)
+
+    batch_shape = (len(images),) + max_size
+    batched_imgs = images[0].new(*batch_shape).zero_()
+    for img, pad_img in zip(images, batched_imgs):
+        pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+
+    image_sizes = [im.shape[-2:] for im in batched_imgs]
+
+    return batched_imgs, image_sizes
