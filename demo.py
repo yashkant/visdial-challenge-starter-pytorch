@@ -4,8 +4,7 @@ import os
 import torch
 import yaml
 
-from captioning import PythiaCaptioning
-from detector import DetectionModel
+from captioning import DetectCaption, build_detection_model, build_caption_model
 from visdialch.data import Vocabulary
 from visdialch.data.demo_object import DemoObject
 from visdialch.model import EncoderDecoderModel
@@ -109,13 +108,13 @@ vocabulary = Vocabulary(
 enc_dec_model = EncoderDecoderModel(model_config, vocabulary).to(device)
 enc_dec_model.load_checkpoint(args.load_pthpath)
 
-# Build the captioning model and load its checkpoint
-# Path to the checkpoint is picked from captioning_config
-detection_model = DetectionModel(captioning_config, device)
-caption_model = PythiaCaptioning(captioning_config, device)
+# Build the detection and captioning model and load their checkpoints
+# Path to the checkpoints are picked from captioning_config
+detection_model = build_detection_model(captioning_config, device)
+caption_model, caption_processor, text_processor = build_caption_model(captioning_config, device)
 
 # Wrap the detection and caption models together
-detect_caption_model = DetectCaption(detection_model, caption_model, device)
+detect_caption_model = DetectCaption(detection_model, caption_model, caption_processor, text_processor, device)
 
 # Pass the Captioning and Encoder-Decoder models and initialize DemoObject
 demo_object = DemoObject(

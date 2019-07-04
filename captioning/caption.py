@@ -8,69 +8,60 @@ from pythia.utils.configuration import ConfigNode
 
 # TODO: Docstrings and hints
 # Build Captioning Model
-class PythiaCaptioning:
-    TARGET_IMAGE_SIZE = [448, 448]
-    CHANNEL_MEAN = [0.485, 0.456, 0.406]
-    CHANNEL_STD = [0.229, 0.224, 0.225]
 
-    def __init__(self, caption_config, cuda_device):
-        self.caption_config = caption_config
-        self.cuda_device = cuda_device
-        self._init_processors()
-        self.pythia_model = self._build_pythia_model()
+def build_caption_model(caption_config, cuda_device):
+    with open(caption_config["butd_model"]["config_yaml"]) as f:
+        config = yaml.load(f)
+    config = ConfigNode(config)
+    config.training_parameters.evalai_inference = True
+    registry.register("config", config)
 
-    def _init_processors(self):
-        with open(self.caption_config["butd_model"]["config_yaml"]) as f:
-            config = yaml.load(f)
+    caption_processor, text_processor = init_processors(caption_config, config)
+    state_dict = torch.load(caption_config["butd_model"]["model_pth"])
+    model_config = config.model_attributes.butd
+    model_config.model_data_dir = caption_config["model_data_dir"]
+    model = BUTD(model_config)
+    model.build()
+    model.init_losses_and_metrics()
 
-        config = ConfigNode(config)
-        # Remove warning
-        config.training_parameters.evalai_inference = True
-        registry.register("config", config)
+    if list(state_dict.keys())[0].startswith('module') and \
+            not hasattr(model, 'module'):
+        state_dict = multi_gpu_state_to_single(state_dict)
 
-        self.config = config
+    model.load_state_dict(state_dict)
+    model.to(cuda_device)
+    model.eval()
 
-        captioning_config = config.task_attributes.captioning \
-            .dataset_attributes.coco
-        text_processor_config = captioning_config.processors.text_processor
-        caption_processor_config = captioning_config.processors \
-            .caption_processor
-        vocab_file_path = self.caption_config[
-            "text_caption_processor_vocab_txt"]
-        text_processor_config.params.vocab.vocab_file = vocab_file_path
-        caption_processor_config.params.vocab.vocab_file = vocab_file_path
-        self.text_processor = VocabProcessor(text_processor_config.params)
-        self.caption_processor = CaptionProcessor(
-            caption_processor_config.params)
+    return model, caption_processor, text_processor
 
-        registry.register("coco_text_processor", self.text_processor)
-        registry.register("coco_caption_processor", self.caption_processor)
 
-    def _build_pythia_model(self):
-        state_dict = torch.load(self.caption_config["butd_model"]["model_pth"])
-        model_config = self.config.model_attributes.butd
-        model_config.model_data_dir = self.caption_config["model_data_dir"]
-        model = BUTD(model_config)
-        model.build()
-        model.init_losses_and_metrics()
+def init_processors(caption_config, config):
+    captioning_config = config.task_attributes.captioning \
+        .dataset_attributes.coco
+    text_processor_config = captioning_config.processors.text_processor
+    caption_processor_config = captioning_config.processors \
+        .caption_processor
+    vocab_file_path = caption_config[
+        "text_caption_processor_vocab_txt"]
+    text_processor_config.params.vocab.vocab_file = vocab_file_path
+    caption_processor_config.params.vocab.vocab_file = vocab_file_path
+    text_processor = VocabProcessor(text_processor_config.params)
+    caption_processor = CaptionProcessor(
+        caption_processor_config.params)
 
-        if list(state_dict.keys())[0].startswith('module') and \
-                not hasattr(model, 'module'):
-            state_dict = self._multi_gpu_state_to_single(state_dict)
+    registry.register("coco_text_processor", text_processor)
+    registry.register("coco_caption_processor", caption_processor)
 
-        model.load_state_dict(state_dict)
-        model.to(self.cuda_device)
-        model.eval()
+    return caption_processor, text_processor
 
-        return model
 
-    def _multi_gpu_state_to_single(self, state_dict):
-        new_sd = {}
-        for k, v in state_dict.items():
-            if not k.startswith('module.'):
-                raise TypeError("Not a multiple GPU state of dict")
-            k1 = k[7:]
-            new_sd[k1] = v
-        return new_sd
+def multi_gpu_state_to_single(state_dict):
+    new_sd = {}
+    for k, v in state_dict.items():
+        if not k.startswith('module.'):
+            raise TypeError("Not a multiple GPU state of dict")
+        k1 = k[7:]
+        new_sd[k1] = v
+    return new_sd
 
 

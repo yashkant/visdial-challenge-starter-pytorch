@@ -7,10 +7,12 @@ import torch
 # combined the caption generation from raw image path
 class DetectCaption:
 
-    def __init__(self, detection_model, caption_model, cuda_device):
+    def __init__(self, detection_model, caption_model, caption_processor, text_processor, cuda_device):
         self.detection_model = detection_model
-        self.pythia_model = caption_model
+        self.caption_model = caption_model
         self.cuda_device = cuda_device
+        self.caption_processor = caption_processor
+        self.text_processor = text_processor
 
     def predict(self, url, feat_name, get_features=False):
         with torch.no_grad():
@@ -33,7 +35,7 @@ class DetectCaption:
             sample_list = SampleList([sample])
             sample_list = sample_list.to(self.cuda_device)
 
-            tokens = self.pythia_model(sample_list)["captions"]
+            tokens = self.caption_model(sample_list)["captions"]
 
         gc.collect()
         torch.cuda.empty_cache()

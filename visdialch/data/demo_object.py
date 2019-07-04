@@ -129,7 +129,7 @@ class DemoObject:
             image_features = normalize(image_features, dim=0, p=2)
 
         self.image_caption_nl = \
-        self.detect_caption_model.pythia_model.caption_processor(
+        self.detect_caption_model.caption_processor(
             caption_tokens.tolist()[0]
         )["caption"]
         self.image_caption = self.vocabulary.to_indices(
