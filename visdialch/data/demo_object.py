@@ -30,7 +30,7 @@ class DemoObject:
             add_boundary_toks: bool = True,
     ):
         super().__init__()
-        self.caption_model = caption_model
+        self.detect_caption_model = caption_model
         self.enc_dec_model = enc_dec_model
         self.vocabulary = vocabulary
         self.dataset_config = config["dataset"]
@@ -119,7 +119,7 @@ class DemoObject:
         if not os.path.isabs(image_path) and not validate_url(image_path):
             image_path = os.path.abspath(image_path)
         print(f"Loading image from : {image_path}")
-        caption_tokens, image_features = self.caption_model.predict(
+        caption_tokens, image_features = self.detect_caption_model.predict(
             image_path,
             self.caption_config["detectron_model"]["feat_name"],
             True,
@@ -129,8 +129,9 @@ class DemoObject:
             image_features = normalize(image_features, dim=0, p=2)
 
         self.image_caption_nl = \
-        self.caption_model.caption_processor(caption_tokens.tolist()[0])[
-            "caption"]
+        self.detect_caption_model.caption_processor(
+            caption_tokens.tolist()[0]
+        )["caption"]
         self.image_caption = self.vocabulary.to_indices(
             word_tokenize(self.image_caption_nl))
         self.image_features = image_features.unsqueeze(0)

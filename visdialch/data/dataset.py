@@ -347,18 +347,6 @@ class RawImageDataset(Dataset):
             start_idx, end_idx = restrict_range[0], restrict_range[1]
             self.image_ids = self.image_ids[start_idx:end_idx]
             print(f"Truncated Dataset with start_idx: {start_idx} and end_idx: {end_idx}")
-        # self.debug_func()
-
-    def debug_func(self):
-        for image_id in self.raw_image_reader._image_ids:
-            index = self.raw_image_reader._image_ids.index(image_id)
-            image_path = self.raw_image_reader._image_paths[index]
-            image = self.raw_image_reader._images[index]
-            im = np.array(image).astype(np.float32)
-            try:
-                im = im[:, :, ::-1]
-            except:
-                print(f"Bad Image: path={image_path}, shape={im.shape}")
 
     def __getitem__(self, index):
         item = {}
