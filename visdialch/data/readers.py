@@ -200,7 +200,7 @@ class RawImageReader(object):
 
         # read and store images from paths (TODO: add in-mem option)
         images = []
-        for img_path in image_paths:
+        for img_path in tqdm(image_paths):
             if in_mem:
                 images.append(self.read_actual_image(img_path))
             else:
@@ -227,11 +227,9 @@ class RawImageReader(object):
         index = self._image_ids.index(image_id)
         image_path = self._image_paths[index]
         image = self._images[index]
-        if image is not None:
-            return image
-        else:
+        if image is None:
             image = self.read_actual_image(image_path)
-            self._images.append(image)
+            self._images[index]= image
         return image
 
     @property

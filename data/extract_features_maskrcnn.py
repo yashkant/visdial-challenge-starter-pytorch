@@ -60,7 +60,7 @@ parser.add_argument(
 parser.add_argument(
     "--feat-name",
     help="The name of the layer to extract features from.",
-    default="fc7",
+    default="fc6",
 )
 parser.add_argument(
     "--feat-dims",
@@ -77,14 +77,33 @@ parser.add_argument(
     "--gpu-ids",
     help="The GPU id to use (-1 for CPU execution)",
     type=int,
-    default=[0,1],
+    default=0,
+)
+parser.add_argument(
+    "--start-range",
+    help="Restrict Range of the Dataset",
+    type=int,
+    default=None,
+)
+parser.add_argument(
+    "--stop-range",
+    help="Restrict Range of the Dataset",
+    type=int,
+    default=None,
 )
 parser.add_argument(
     "--batch-size",
     help="Batch size for no. of images to be processed in one iteration",
     type=int,
-    default=2,
+    default=1,
 )
+
+# For reproducibility.
+# Refer https://pytorch.org/docs/stable/notes/randomness.html
+torch.manual_seed(0)
+torch.cuda.manual_seed_all(0)
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 
 
 def image_id_from_path(image_path):
@@ -117,7 +136,7 @@ def main(args):
     # TODO: We just require captioning config only, so let's keep a local file
     # TODO: Also add batch_size and other extraction specific configs to file
     visdial_path = os.getcwd() + "/../"
-    config = yaml.load(open(visdial_path + args.config))
+    config = yaml.load(open(visdial_path + args.config), Loader=yaml.FullLoader)
     caption_config = config["captioning"]
     cfg.merge_from_file(
         visdial_path + caption_config["detectron_model"]["config_yaml"]
@@ -132,6 +151,8 @@ def main(args):
         if args.gpu_ids[0] >= 0
         else torch.device("cpu")
     )
+
+    print("Loading Model...")
 
     # TODO: pretty print config and usedse get_abspath, put config file in cwd
     # build mask-rcnn detection model
@@ -154,9 +175,12 @@ def main(args):
         item_batch = {}
         item_batch["image"] = []
         item_batch["im_scales"] = []
+        item_batch["image_ids"] = []
+
         for item in batch:
             item_batch["image"].append(item["image"])
             item_batch["im_scales"].append(item["im_scale"])
+            item_batch["image_ids"].append(item["image_id"])
 
         item_batch["image"], item_batch["image_size"] = pad_raw_image_batch(
             item_batch["image"],
@@ -164,9 +188,14 @@ def main(args):
         )
         return item_batch
     
-    print("Model loaded, Loading Dataset next")
+    print("Model Loaded, Loading Dataset now...")
     
-    raw_image_dataset = RawImageDataset(args.image_root, args.split, True, False)
+    restrict_range = None
+    if args.start_range is not None and args.stop_range is not None:
+        args.save_path = args.save_path.split('.')[0] + "_range_" + str(args.start_range) + "_to_" + str(args.stop_range) + '.h5'
+        restrict_range = [args.start_range, args.stop_range]
+
+    raw_image_dataset = RawImageDataset(args.image_root, args.split, True, False, restrict_range)
     raw_image_dataloader = DataLoader(
         raw_image_dataset,
         batch_size=args.batch_size,
@@ -193,7 +222,7 @@ def main(args):
     scores_h5d = save_h5.create_dataset(
         "scores", (len(raw_image_dataset), args.max_boxes,),
     )
-    print("Dataset loaded")
+    print("Dataset Loaded")
 
     # rearrange output from the model from process_feat_extraction function
     def rearrange_ouput(output):
@@ -203,36 +232,39 @@ def main(args):
                 output[0][key] = output[0][key].view(-1, embed_dim)
         return output
 
-
     for i, batch in enumerate(tqdm(raw_image_dataloader)):
 
         # calculate idx_start and idx_end
         batch_size = args.batch_size
         idx_start, idx_end = i * batch_size, (i + 1) * batch_size
 
-        # shape: ( batch_size, dict )
+        # get the image_ids present in the batch
+        image_ids = batch.pop("image_ids")
+
         for key in batch:
             if isinstance(batch[key], list):
                 batch[key] = torch.Tensor(batch[key])
-            
             batch[key] = batch[key].to(device)
 
         with torch.no_grad():
-            output = detection_model(batch)
+            output = detection_model(batch, mode="extraction")
 
         output = rearrange_ouput(output)
         feat_name = caption_config["detectron_model"]["feat_name"]
         get_boxes = True
 
+        # use NMS and preserve only the ``args.max_boxes`` features
         boxes, features, classes, scores = process_feature_extraction(
             output,
             batch["im_scales"],
+            args.max_boxes,
             get_boxes=get_boxes,
             feat_name=feat_name,
             conf_thresh=0.2
         )
 
-
+        # store to extracted features to HDF file
+        image_ids_h5d[idx_start:idx_end] = np.array(image_ids)
         boxes_h5d[idx_start:idx_end] = np.array(
             [item.cpu().numpy() for item in boxes])
         features_h5d[idx_start:idx_end] = np.array(

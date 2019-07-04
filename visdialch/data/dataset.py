@@ -336,12 +336,28 @@ class VisDialDataset(Dataset):
 
 
 class RawImageDataset(Dataset):
-    def __init__(self, image_dirs: str, split: str, transform: bool, in_mem: bool) -> None:
+    def __init__(self, image_dirs: str, split: str, transform: bool, in_mem: bool, restrict_range: List[int]=None) -> None:
         super().__init__()
         self.in_mem = in_mem
         self.raw_image_reader = RawImageReader(image_dirs, split, in_mem)
         self.image_ids = self.raw_image_reader.image_ids
         self.transform = transform
+        if restrict_range is not None:
+            assert(len(restrict_range) == 2, "Range should contain only two ints")
+            start_idx, end_idx = restrict_range[0], restrict_range[1]
+            self.image_ids = self.image_ids[start_idx:end_idx]
+        # self.debug_func()
+
+    def debug_func(self):
+        for image_id in self.raw_image_reader._image_ids:
+            index = self.raw_image_reader._image_ids.index(image_id)
+            image_path = self.raw_image_reader._image_paths[index]
+            image = self.raw_image_reader._images[index]
+            im = np.array(image).astype(np.float32)
+            try:
+                im = im[:, :, ::-1]
+            except:
+                print(f"Bad Image: path={image_path}, shape={im.shape}")
 
     def __getitem__(self, index):
         item = {}
@@ -350,7 +366,8 @@ class RawImageDataset(Dataset):
         image = self.raw_image_reader[image_id]
         item["image"] = image
         if self.transform:
-            item["image"], item["im_scale"] = self.image_transform(image)
+            item["image"], item["im_scale"] = self.image_transform(image, image_id)
+        item["image_id"] = image_id
         return item
 
     def __len__(self):
@@ -360,8 +377,17 @@ class RawImageDataset(Dataset):
     def split(self):
         return self.raw_image_reader.split
 
-    def image_transform(self, image):
+    def image_transform(self, image, image_id):
         im = np.array(image).astype(np.float32)
+        
+        # handle b/w and four channeled images, also log them
+        if len(im.shape) == 2:
+            im = np.stack([im,im,im], axis=2)
+            print(f"Found a grayscale image: image-id = {image_id}")
+        elif len(im.shape) == 3 and im.shape[2] == 4:
+            im = im[:,:,:-1]
+            print(f"Found a four channeled image: image-id = {image_id}")
+
         im = im[:, :, ::-1]
         im -= np.array([102.9801, 115.9465, 122.7717])
         im_shape = im.shape

@@ -1,9 +1,9 @@
 import os
-
 import cv2
 import numpy as np
 import torch
 import requests
+import math
 from PIL import Image
 from maskrcnn_benchmark.layers import nms
 from maskrcnn_benchmark.structures.image_list import to_image_list
@@ -16,7 +16,7 @@ def read_actual_image(image_path):
     else:
         path = image_path
     img = Image.open(path)
-    img.load()
+    img.load() # close the loaded image
     return img
 
 
@@ -46,6 +46,7 @@ def image_transform(image_path):
 
 def process_feature_extraction(output,
                                im_scales,
+                               max_boxes=100,
                                get_boxes=False,
                                feat_name='fc6',
                                conf_thresh=0.2):
@@ -63,10 +64,7 @@ def process_feature_extraction(output,
     conf_list = []
 
     for i in range(batch_size):
-        op = output[0]["fc6"]
-        print(f"Debug: im_scales={im_scales.device}, output={op.device}")
-
-        # bbox below stays on cuda device 1 from where it came
+        # bbox below stays on the device where it was generated
         dets = output[0]["proposals"][i].bbox.to(cur_device) / im_scales[i]
         scores = score_list[i]
 
@@ -79,8 +77,6 @@ def process_feature_extraction(output,
 
         for cls_ind in range(1, scores.shape[1]):
             cls_scores = scores[:, cls_ind]
-            print(f"Debug: scores={scores.device}, cls_scores={cls_scores.device}")
-            print(f"Debug: ind={cls_ind}")
             keep = nms(dets, cls_scores, 0.5)
 
             if get_boxes:
@@ -103,7 +99,7 @@ def process_feature_extraction(output,
             )
 
         # TODO: add max-boxes config instead of 100 and use below
-        keep_boxes = torch.argsort(max_conf, descending=True)[:100]
+        keep_boxes = torch.argsort(max_conf, descending=True)[:max_boxes]
         feat_list.append(feats[i][keep_boxes])
 
         if not get_boxes:
@@ -154,8 +150,6 @@ def get_abspath(path):
 def pad_raw_image_batch(images: torch.Tensor, size_divisible: int = 0):
     max_size = tuple(max(s) for s in zip(*[img.shape for img in images]))
     if size_divisible > 0:
-        import math
-
         stride = size_divisible
         max_size = list(max_size)
         max_size[1] = int(math.ceil(max_size[1] / stride) * stride)
