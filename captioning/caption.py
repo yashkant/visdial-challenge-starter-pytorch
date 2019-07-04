@@ -1,19 +1,13 @@
-import gc
 import torch
-import torch.nn.functional as F
 import yaml
-from maskrcnn_benchmark.config import cfg
-from maskrcnn_benchmark.modeling.detector import build_detection_model
-from maskrcnn_benchmark.utils.model_serialization import load_state_dict
 from pythia.common.registry import registry
-from pythia.common.sample import Sample, SampleList
 from pythia.models.butd import BUTD
 from pythia.tasks.processors import VocabProcessor, CaptionProcessor
 from pythia.utils.configuration import ConfigNode
-from .utils import get_detectron_features
 
 
 # TODO: Docstrings and hints
+# Build Captioning Model
 class PythiaCaptioning:
     TARGET_IMAGE_SIZE = [448, 448]
     CHANNEL_MEAN = [0.485, 0.456, 0.406]
@@ -24,7 +18,6 @@ class PythiaCaptioning:
         self.cuda_device = cuda_device
         self._init_processors()
         self.pythia_model = self._build_pythia_model()
-        self.detection_model = self._build_detection_model()
 
     def _init_processors(self):
         with open(self.caption_config["butd_model"]["config_yaml"]) as f:
@@ -80,57 +73,4 @@ class PythiaCaptioning:
             new_sd[k1] = v
         return new_sd
 
-    def predict(self, url, feat_name, get_features=False):
-        with torch.no_grad():
-            detectron_features = get_detectron_features(
-                [url],
-                self.detection_model,
-                False,
-                feat_name,
-                self.cuda_device
-            )
-            # returns a single-element list
-            detectron_features = detectron_features[0]
 
-            sample = Sample()
-            sample.dataset_name = "coco"
-            sample.dataset_type = "test"
-            sample.image_feature_0 = detectron_features
-            sample.answers = torch.zeros((5, 10), dtype=torch.long)
-
-            sample_list = SampleList([sample])
-            sample_list = sample_list.to(self.cuda_device)
-
-            tokens = self.pythia_model(sample_list)["captions"]
-
-        gc.collect()
-        torch.cuda.empty_cache()
-
-        if not get_features:
-            return tokens
-        else:
-            return tokens, detectron_features
-
-    def _build_detection_model(self):
-
-        cfg.merge_from_file(
-            self.caption_config["detectron_model"]["config_yaml"])
-        cfg.freeze()
-
-        model = build_detection_model(cfg)
-        checkpoint = torch.load(
-            self.caption_config["detectron_model"]["model_pth"],
-            map_location=self.cuda_device)
-
-        load_state_dict(model, checkpoint.pop("model"))
-
-        model.to(self.cuda_device)
-        model.eval()
-        return model
-
-    def masked_unk_softmax(self, x, dim, mask_idx):
-        x1 = F.softmax(x, dim=dim)
-        x1[:, mask_idx] = 0
-        x1_sum = torch.sum(x1, dim=1, keepdim=True)
-        y = x1 / x1_sum
-        return y
