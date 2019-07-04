@@ -3,11 +3,15 @@ import torch
 import cv2  # must import before importing caffe2 due to bug in cv2
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import h5py
 import yaml
 import sys
 import numpy as np
 import os
+import warnings
+# disable warning
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=FutureWarning)
+    import h5py
 
 sys.path.append("..")  # add parent to import modules
 # path to packages inside captioning are already available to interpreter
@@ -40,7 +44,7 @@ parser.add_argument(
 parser.add_argument(
     "--config",
     help="Path to model config file used by Detectron (.yaml)",
-    default="configs/lf_gen_faster_rcnn_x101_demo.yml",
+    default="extract_config.yaml",
 )
 
 parser.add_argument(
@@ -74,23 +78,23 @@ parser.add_argument(
     "--gpu-ids",
     help="The GPU id to use (-1 for CPU execution)",
     type=int,
-    default=0,
+    default=[0],
 )
 parser.add_argument(
     "--start-range",
-    help="Restrict Range of the Dataset",
+    help="Truncate the dataset, from the beginning",
     type=int,
     default=None,
 )
 parser.add_argument(
     "--stop-range",
-    help="Restrict Range of the Dataset",
+    help="Truncate the dataset, from the end",
     type=int,
     default=None,
 )
 parser.add_argument(
     "--batch-size",
-    help="Batch size for no. of images to be processed in one iteration",
+    help="Number of images to be processed in one iteration",
     type=int,
     default=1,
 )
@@ -113,10 +117,10 @@ def main(args):
         Parsed command-line arguments.
     """
     # load config
-    # TODO: We just require captioning config only, so let's keep a local file
     # TODO: Also add batch_size and other extraction specific configs to file
+    # TODO: Fix path resolution below
     visdial_path = os.getcwd() + "/../"
-    config = yaml.load(open(visdial_path + args.config), Loader=yaml.FullLoader)
+    config = yaml.load(open(args.config), Loader=yaml.FullLoader)
     caption_config = config["captioning"]
     cfg.merge_from_file(
         visdial_path + caption_config["detectron_model"]["config_yaml"]
@@ -161,7 +165,7 @@ def main(args):
     raw_image_dataset = RawImageDataset(
         args.image_root,
         args.split,
-        trasform=True,
+        transform=True,
         in_mem=False,
         restrict_range=restrict_range
     )
@@ -208,7 +212,7 @@ def main(args):
             batch[key] = batch[key].to(device)
 
         with torch.no_grad():
-            output = detection_model(batch, mode="extraction")
+            output = detection_model(batch, mode="extract")
 
         output = rearrange_ouput(output)
         feat_name = caption_config["detectron_model"]["feat_name"]

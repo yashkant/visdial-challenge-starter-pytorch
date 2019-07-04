@@ -77,7 +77,7 @@ if not os.path.isabs(args.config_yml):
     args.config_yml = os.path.abspath(args.config_yml)
 
 # keys: {"dataset", "model", "solver"}
-config = yaml.load(open(args.config_yml))
+config = yaml.load(open(args.config_yml), Loader=yaml.FullLoader)
 
 if isinstance(args.gpu_ids, int):
     args.gpu_ids = [args.gpu_ids]

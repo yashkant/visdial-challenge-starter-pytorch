@@ -103,7 +103,7 @@ def process_feature_extraction(output,
         feat_list.append(feats[i][keep_boxes])
 
         if not get_boxes:
-            return [feat_list]
+            return feat_list
 
         conf_list.append(max_conf[keep_boxes])
         boxes_list.append(max_box[keep_boxes])
@@ -117,15 +117,13 @@ def get_detectron_features(image_paths,
                            detection_model,
                            get_boxes,
                            feat_name,
-                           device,
-                           batch_mode=False):
+                           device):
     img_tensor, im_scales = [], []
 
-    if batch_mode:
-        for img_path in image_paths:
-            im, im_scale = image_transform(img_path)
-            img_tensor.append(im)
-            im_scales.append(im_scale)
+    for img_path in image_paths:
+        im, im_scale = image_transform(img_path)
+        img_tensor.append(im)
+        im_scales.append(im_scale)
 
     current_img_list = to_image_list(img_tensor, size_divisible=32)
     current_img_list = current_img_list.to(device)

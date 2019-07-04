@@ -346,6 +346,7 @@ class RawImageDataset(Dataset):
             assert(len(restrict_range) == 2, "Range should contain only two ints")
             start_idx, end_idx = restrict_range[0], restrict_range[1]
             self.image_ids = self.image_ids[start_idx:end_idx]
+            print(f"Truncated Dataset with start_idx: {start_idx} and end_idx: {end_idx}")
         # self.debug_func()
 
     def debug_func(self):

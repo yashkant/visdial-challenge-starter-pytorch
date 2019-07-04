@@ -35,9 +35,11 @@ def collate_function(batch):
     item_batch = {}
     item_batch["image"] = []
     item_batch["im_scales"] = []
+    item_batch["image_ids"] = []
     for item in batch:
         item_batch["image"].append(item["image"])
         item_batch["im_scales"].append(item["im_scale"])
+        item_batch["image_ids"].append(item["image_id"])
 
     item_batch["image"], item_batch["image_size"] = pad_raw_image_batch(
         item_batch["image"],
