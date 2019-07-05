@@ -10,7 +10,7 @@ from maskrcnn_benchmark.structures.image_list import to_image_list
 
 # TODO: Comments, Docstrings, Cleanup.
 
-def read_actual_image(image_path):
+def read_image(image_path):
     if image_path.startswith('http'):
         path = requests.get(image_path, stream=True).raw
     else:
@@ -20,10 +20,10 @@ def read_actual_image(image_path):
     return img
 
 
-def image_transform(image_path):
-    img = read_actual_image(image_path)
+def image_transform(img):
     im = np.array(img).astype(np.float32)
     im = im[:, :, ::-1]
+    # Transform used for BUTD model in pythia trained on coco
     im -= np.array([102.9801, 115.9465, 122.7717])
     im_shape = im.shape
     im_size_min = np.min(im_shape[0:2])
@@ -98,7 +98,6 @@ def process_feature_extraction(output,
                 max_conf[keep]
             )
 
-        # TODO: add max-boxes config instead of 100 and use below
         keep_boxes = torch.argsort(max_conf, descending=True)[:max_boxes]
         feat_list.append(feats[i][keep_boxes])
 
@@ -121,7 +120,8 @@ def get_detectron_features(image_paths,
     img_tensor, im_scales = [], []
 
     for img_path in image_paths:
-        im, im_scale = image_transform(img_path)
+        im = read_image(img_path)
+        im, im_scale = image_transform(im)
         img_tensor.append(im)
         im_scales.append(im_scale)
 
@@ -130,14 +130,15 @@ def get_detectron_features(image_paths,
     with torch.no_grad():
         output = detection_model(current_img_list)
 
-    return_list = process_feature_extraction(
+    feat_list = process_feature_extraction(
         output,
         im_scales,
         get_boxes=get_boxes,
         feat_name=feat_name,
         conf_thresh=0.2
     )
-    return return_list
+    return feat_list
+
 
 def get_abspath(path):
     if not os.path.isabs(path):

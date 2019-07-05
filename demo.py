@@ -111,10 +111,19 @@ enc_dec_model.load_checkpoint(args.load_pthpath)
 # Build the detection and captioning model and load their checkpoints
 # Path to the checkpoints are picked from captioning_config
 detection_model = build_detection_model(captioning_config, device)
-caption_model, caption_processor, text_processor = build_caption_model(captioning_config, device)
+caption_model, caption_processor, text_processor = build_caption_model(
+    captioning_config,
+    device
+)
 
 # Wrap the detection and caption models together
-detect_caption_model = DetectCaption(detection_model, caption_model, caption_processor, text_processor, device)
+detect_caption_model = DetectCaption(
+    detection_model,
+    caption_model,
+    caption_processor,
+    text_processor,
+    device
+)
 
 # Pass the Captioning and Encoder-Decoder models and initialize DemoObject
 demo_object = DemoObject(

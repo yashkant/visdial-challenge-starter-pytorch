@@ -4,7 +4,7 @@ from maskrcnn_benchmark.modeling.detector import build_detection_model as _build
 from maskrcnn_benchmark.utils.model_serialization import load_state_dict
 
 # Build Detection Model
-
+# TODO: Docstrings, hints
 def build_detection_model(caption_config, cuda_device):
     cfg.merge_from_file(
         caption_config["detectron_model"]["config_yaml"])
