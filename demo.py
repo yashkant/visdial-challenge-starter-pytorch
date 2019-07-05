@@ -15,8 +15,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--config-yml",
     default="configs/lf_gen_faster_rcnn_x101_demo.yml",
-    help="Path to a config file listing reader, model and optimization "
-         "parameters.",
+    help="Path to a config file listing reader, visual dialog and captioning "
+         "model parameters.",
 )
 
 parser.add_argument_group("Demo related arguments")

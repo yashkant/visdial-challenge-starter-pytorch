@@ -174,16 +174,17 @@ class DenseAnnotationsReader(object):
 
 class RawImageReader(object):
     """
-    A reader for raw images given the path. You need to pass as argument the
-    split type (`train`, `test`, `val`)
+    A reader for raw images given list of paths. You need to pass as argument
+    split type (`train`, `test`, `val`). Pass the paths of dirs that
+    contain raw images and not the extracted features.
 
     Parameters
     ----------
-    image_dir_path : str
+    image_dirs : List[]
         Path to a directory containing raw images
     """
 
-    def __init__(self, image_dirs: str, split: str, in_mem: bool):
+    def __init__(self, image_dirs: List[str], split: str, in_mem: bool):
         # list of paths (example: "coco_train2014/COCO_train2014_*.jpg")
         image_paths, image_ids = [], []
         for image_dir in image_dirs:
@@ -212,6 +213,19 @@ class RawImageReader(object):
         self._split = split
 
     def read_actual_image(self, image_path):
+        r""" Read the image from an url or given path.
+
+        Parameters
+        ----------
+        image_path : ``str``
+            Image path as string.
+
+        Returns
+        -------
+        numpy.array
+            Image.
+
+        """
         if image_path.startswith('http'):
             path = requests.get(image_path, stream=True).raw
         else:
@@ -229,7 +243,7 @@ class RawImageReader(object):
         image = self._images[index]
         if image is None:
             image = self.read_actual_image(image_path)
-            self._images[index]= image
+            self._images[index] = image
         return image
 
     @property
