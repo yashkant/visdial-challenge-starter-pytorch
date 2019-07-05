@@ -6,4 +6,4 @@
 	url = https://github.com/facebookresearch/pythia.git
 [submodule "captioning/vqa-maskrcnn-benchmark"]
 	path = captioning/vqa-maskrcnn-benchmark
-	url = https://gitlab.com/meetshah1995/vqa-maskrcnn-benchmark.git
+	url = https://gitlab.com/yashkant/vqa-maskrcnn-benchmark.git
