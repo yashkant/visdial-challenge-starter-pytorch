@@ -9,24 +9,42 @@ from visdialch.data import VisDialDataset
 from urllib.parse import urlparse
 
 
-# TODO: Add docstrings, hints
-def validate_url(url):
-    try:
-        result = urlparse(url)
-        return all([result.scheme, result.netloc, result.path])
-    except:
-        return False
+class DemoSessionManager:
+    """
+    Maintains the complete demo session: captioning, dialogs, history updates.
 
+    Inside a lifecycle of the demo session, we proceed in the following order:
+    1. Intialize ``DemoSessionManager``.
+    2. Call ``set_image`` method to generate image caption and extract features.
+    3. Call ``respond`` method and generate reply to ``user_question``, this
+       also updates the conversation history.
+    4. To start a new conversation, call ``set_image`` and pass the new image,
+       this also resets all the previous sessions' data and loops back to Step2.
 
-class DemoObject:
+    Attributes
+    ----------
+    caption_model : ``PythiaCaptioning``
+        Captioning model.
+    enc_dec_model : ``EncoderDecoderModel``
+        Visual Dialog model.
+    vocabulary : ``Vocabulary``
+        Extracted vocabulary
+    config : ``Dict[str, Any]``
+        Configurations merged from cmd and config file
+    cuda_device : ``torch.device``
+        Cuda device where models will be loaded
+    add_boundary_toks : ``bool``
+        TODO: need this?
+
+    """
 
     def __init__(
             self,
-            caption_model,
-            enc_dec_model,
-            vocabulary,
+            caption_model: PythiaCaptioning,
+            enc_dec_model: EncoderDecoderModel,
+            vocabulary: Vocabulary,
             config: Dict[str, Any],
-            cuda_device,
+            cuda_device: torch.device,
             add_boundary_toks: bool = True,
     ):
         super().__init__()
@@ -47,9 +65,23 @@ class DemoObject:
         self.history, self.history_lengths = [], []
         self.num_rounds = 0
 
-    # Call this method to retrive a dict object for inference. Pass the
-    # natural language question asked by the user as arg.
     def _get_data(self, question: Optional[str] = None):
+        r""" Build a dict object for inference with the Visdial
+        model from natural language question. This is used internally by the
+        ``self.respond`` method.
+
+        Parameters
+        ----------
+        question : ``str``
+            Pass the question as raw string.
+
+        Returns
+        -------
+        Dict[str, torch.Tensor]
+            A dictionary object that can be passed to forward method of the
+            Visdial model.
+
+        """
         data = {}
         data["img_feat"] = self.image_features
 
@@ -75,11 +107,23 @@ class DemoObject:
         return data
 
     # Call this method as we have new dialogs (ques/ans pairs) in conversation.
-    def update(
+    def _update(
             self,
             question: Optional[str] = None,
             answer: Optional[str] = None,
     ):
+        r""" Update the conversation history with the latest dialog
+        (que-ans pair). This is used internally by the ``self.respond`` method.
+
+        Parameters
+        ----------
+        question : ``str``
+            Pass the question as raw string.
+        answer: ``str``
+            Pass the answer as raw string.
+
+        """
+
         if question is not None:
             question = word_tokenize(question)
             question = self.vocabulary.to_indices(question)
@@ -105,6 +149,10 @@ class DemoObject:
 
     # Call this method to reset data, this is used internally by set_image()
     def _reset(self):
+        r""" Delete all the data of the current conversation.  This is used
+        internally by the ``self.set_image`` method.
+
+        """
         self.image_features, self.image_caption_nl, self.image_caption = (
             None, None, None
         )
@@ -115,6 +163,22 @@ class DemoObject:
 
     # Download, extract features and build caption for the image
     def set_image(self, image_path):
+        r""" Build a dict object for inference inside the Visdial
+        model. This is used internally by the ``respond`` method.
+
+        Parameters
+        ----------
+        question : ``str``
+            Pass the question as raw string.
+
+        Returns
+        -------
+        Dict[str, torch.Tensor]
+            A dictionary object that can be passed to forward method of the
+            Visdial model.
+
+        """
+
         self._reset()
         if not os.path.isabs(image_path) and not validate_url(image_path):
             image_path = os.path.abspath(image_path)
@@ -136,18 +200,39 @@ class DemoObject:
             word_tokenize(self.image_caption_nl))
         self.image_features = image_features.unsqueeze(0)
         # build the initial history
-        self.update()
+        self._update()
 
-    # Returns natural language caption
     def get_caption(self):
+        r""" Return natural language caption.
+
+        Returns
+        -------
+        str
+
+        """
+
         if self.image_caption_nl is not None:
             return self.image_caption_nl
         else:
             raise TypeError("Image caption not found. Make sure set_image is "
                             "called prior to using this command.")
 
-    # Respond to the user question
     def respond(self, user_question):
+        r""" Takes in natural language user question and returns a natural
+        language answer to it.
+
+        Parameters
+        ----------
+        user_question : ``str``
+            Pass the raw question as string.
+
+        Returns
+        -------
+        str
+            Answer to the question in natural language.
+
+        """
+
         batch = self._get_data(user_question)
         for key in batch:
             batch[key] = batch[key].to(self.cuda_device)
@@ -166,4 +251,28 @@ class DemoObject:
         # Refer: https://pypi.org/project/mosestokenizer/
         with MosesDetokenizer('en') as detokenize:
             answer = detokenize(answer)
+
+        # Update the dialog history and return answer
+        self._update(user_question, answer)
         return answer
+
+
+def validate_url(path: str):
+    r""" Check whether passed string is a url.
+
+    Parameters
+    ----------
+    path : ``str``
+        Pass the path as string.
+
+    Returns
+    -------
+    bool
+        True/False corresponding to whether it is a url or not.
+
+    """
+    try:
+        result = urlparse(path)
+        return all([result.scheme, result.netloc, result.path])
+    except:
+        return False
